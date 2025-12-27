@@ -107,52 +107,87 @@ class DoraHacksDeepScraper:
             # Extract hackathon name from title (usually "Name | DoraHacks")
             hackathon_name = title.split('|')[0].strip() if '|' in title else title
             
-            # V2 FIX: Enhanced prize extraction with more patterns
+            # V3 FIX: Surgical prize extraction - inspect page structure directly
             prize_amount = 0
-            prize_display = "View Prize Details →"  # Better call-to-action
+            prize_display = "View Prize Details →"
             
-            # Strategy 1: Look for Prize Pool text patterns (expanded)
-            prize_patterns = [
-                r'Prize\s*Pool[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
-                r'Total\s*Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
-                r'Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
-                r'\$\s*([\d,]+(?:\.\d+)?)\s*K?\s*(?:in\s+)?(?:prizes?|pool|USD|bounty|reward)',
-                r'([\d,]+)\s*K?\s*(?:USD|USDC|USDT)\s*(?:Prize|Pool|Bounty|Reward)',
-                r'up\s*to\s*\$?([\d,]+(?:\.\d+)?)\s*K?',  # "up to $X" pattern
-                r'([\d,]+)\s*(?:in\s+)?(?:prizes?|rewards?|bounties?)',  # "X in prizes"
-                r'bounty[:\s]*\$?([\d,]+(?:\.\d+)?)',  # "bounty: $X"
-                r'reward[:\s]*\$?([\d,]+(?:\.\d+)?)',  # "reward: $X"
-            ]
+            # STRATEGY 1: Look for structured prize elements first (most reliable)
+            try:
+                # DoraHacks uses specific class patterns for prize display
+                prize_selectors = [
+                    '.prize-pool', '.prize-amount', '.total-prize',
+                    '[class*="prize"]', '[class*="reward"]', '[class*="bounty"]',
+                    '.hackathon-info .amount', '.buidl-header .prize'
+                ]
+                for selector in prize_selectors:
+                    elem = await page.query_selector(selector)
+                    if elem:
+                        text = await elem.inner_text()
+                        # Extract number from text like "$50,000" or "50,000 USDC"
+                        num_match = re.search(r'[\$]?([\d,]+(?:\.\d+)?)\s*(?:K|k)?', text)
+                        if num_match:
+                            val = float(num_match.group(1).replace(',', ''))
+                            if 'k' in text.lower() and val < 10000:
+                                val *= 1000
+                            if val >= 100:  # Minimum $100 prize to be valid
+                                prize_amount = val
+                                prize_display = f"${prize_amount:,.0f}"
+                                logger.info(f"Prize from element: {prize_display}")
+                                break
+            except Exception as e:
+                logger.debug(f"Element-based prize extraction failed: {e}")
             
-            for pattern in prize_patterns:
-                match = re.search(pattern, content, re.IGNORECASE)
-                if match:
-                    amount_str = match.group(1).replace(',', '')
-                    try:
-                        prize_amount = float(amount_str)
-                        # Handle "K" suffix (e.g., "50K" = 50000)
-                        if 'k' in match.group(0).lower() and prize_amount < 1000:
-                            prize_amount *= 1000
-                        prize_display = f"${prize_amount:,.0f}"
-                        logger.debug(f"Extracted prize: {prize_display} from {url}")
-                        break
-                    except ValueError:
-                        continue
+            # STRATEGY 2: Regex patterns on full page content
+            if prize_amount == 0:
+                prize_patterns = [
+                    # Strongest patterns first - explicit "Prize Pool"
+                    r'(?:Prize\s*Pool|Total\s*Prize|Bounty\s*Pool)[:\s]*\$?([\d,]+(?:\.\d+)?)\s*([Kk])?\s*(?:USD|USDC|USDT)?',
+                    # Dollar amount followed by prize context
+                    r'\$([\d,]+(?:\.\d+)?)\s*([Kk])?\s*(?:in\s*)?(?:prizes?|pool|bounty|bounties|rewards?)',
+                    # Number followed by currency then prize context  
+                    r'([\d,]+(?:\.\d+)?)\s*([Kk])?\s*(?:USD|USDC|USDT)\s*(?:Prize|Pool|Bounty|Reward)',
+                    # "up to $X" pattern
+                    r'up\s*to\s*\$?([\d,]+(?:\.\d+)?)\s*([Kk])?',
+                    # Standalone large dollar amounts (likely prize)
+                    r'(?:^|\s)\$([\d,]+(?:\.\d+)?)\s*([Kk])?(?:\s|$)',
+                ]
+                
+                for pattern in prize_patterns:
+                    match = re.search(pattern, content, re.IGNORECASE)
+                    if match:
+                        amount_str = match.group(1).replace(',', '')
+                        try:
+                            val = float(amount_str)
+                            # Handle K suffix
+                            has_k = match.group(2) is not None if len(match.groups()) > 1 else False
+                            if has_k and val < 10000:
+                                val *= 1000
+                            if val >= 100:  # Minimum threshold
+                                prize_amount = val
+                                prize_display = f"${prize_amount:,.0f}"
+                                logger.info(f"Prize from regex: {prize_display} using pattern {pattern[:30]}")
+                                break
+                        except ValueError:
+                            continue
             
-            # If still no prize found, check for crypto amounts
+            # STRATEGY 3: Crypto amounts as fallback
             if prize_amount == 0:
                 crypto_patterns = [
-                    r'([\d,]+(?:\.\d+)?)\s*(?:ETH|SOL|USDC|USDT|DAI)',
-                    r'([\d,]+(?:\.\d+)?)\s*tokens?',
+                    r'([\d,]+(?:\.\d+)?)\s*([Kk])?\s*(?:ETH|SOL|USDC|USDT|DAI|BTC)',
+                    r'([\d,]+(?:\.\d+)?)\s*([Kk])?\s*tokens?\s*(?:prize|reward|bounty)?',
                 ]
                 for pattern in crypto_patterns:
                     match = re.search(pattern, content, re.IGNORECASE)
                     if match:
                         amount_str = match.group(1).replace(',', '')
                         try:
-                            crypto_amount = float(amount_str)
-                            if crypto_amount > 0:
-                                prize_display = f"{crypto_amount:,.0f}+ in crypto"
+                            val = float(amount_str)
+                            has_k = match.group(2) is not None if len(match.groups()) > 1 else False
+                            if has_k and val < 10000:
+                                val *= 1000
+                            if val > 0:
+                                prize_display = f"{val:,.0f}+ in crypto"
+                                logger.info(f"Crypto prize: {prize_display}")
                                 break
                         except ValueError:
                             continue
