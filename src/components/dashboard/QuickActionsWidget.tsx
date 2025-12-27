@@ -1,4 +1,4 @@
-import { User, FileText, ClipboardList, Bookmark, ChevronRight } from 'lucide-react';
+import { User, FileText, ClipboardList, Bookmark, ChevronRight, Briefcase } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -18,13 +18,22 @@ export const QuickActionsWidget = () => {
 
   const actions: QuickAction[] = [
     {
+      id: 'cv-builder',
+      icon: Briefcase,
+      title: 'Application Builder',
+      description: 'Build your universal application profile',
+      action: 'Build',
+      path: '/profile?tab=resume',
+      variant: 'default',
+    },
+    {
       id: 'tracker',
       icon: ClipboardList,
       title: 'Application Tracker',
       description: 'Track all your applications',
       action: 'View',
       path: '/application-tracker',
-      variant: 'default',
+      variant: 'outline',
     },
     {
       id: 'saved',
@@ -39,17 +48,9 @@ export const QuickActionsWidget = () => {
       id: 'profile',
       icon: User,
       title: 'Complete Profile',
-      description: 'Add GPA to find more scholarships',
+      description: 'Improve your match score',
       action: 'Update',
       path: '/profile',
-      variant: 'outline',
-    },
-    {
-      id: 'documents',
-      icon: FileText,
-      title: 'Upload Documents',
-      description: 'Transcript needed for 12 scholarships',
-      action: 'Upload',
       variant: 'outline',
     },
   ];

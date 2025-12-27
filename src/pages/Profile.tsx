@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -125,6 +126,7 @@ interface Document {
 export default function Profile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -158,6 +160,10 @@ export default function Profile() {
   const [currentProject, setCurrentProject] = useState<Partial<Project>>({});
   const [currentExperience, setCurrentExperience] = useState<Partial<WorkExperience>>({});
   const [techStackInput, setTechStackInput] = useState('');
+
+  // Get initial tab from URL params
+  const initialTab = searchParams.get('tab') || 'profile';
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   useEffect(() => {
     loadUserData();
@@ -520,7 +526,7 @@ export default function Profile() {
 
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="flex-1">
-            <Tabs defaultValue="profile" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="profile">
                   <User className="w-4 h-4 mr-2" />
