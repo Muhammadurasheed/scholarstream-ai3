@@ -78,7 +78,10 @@ def convert_to_scholarship(opp_data: Dict[str, Any], user_profile: UserProfile) 
 
         # 4) Core fields and safe fallbacks
         amount = float(opp_data.get("amount") or 0)
-        amount_display = _to_str(opp_data.get("amount_display")) or (f"${amount:,.0f}" if amount else "$0")
+
+        # V2 FIX: never default to "$0" (it looks like bad data). Prefer an honest CTA.
+        raw_amount_display = _to_str(opp_data.get("amount_display"))
+        amount_display = raw_amount_display or (f"${amount:,.0f}" if amount else "See details")
 
         raw_deadline = opp_data.get("deadline")
         deadline = _to_str(raw_deadline, "")
@@ -107,6 +110,7 @@ def convert_to_scholarship(opp_data: Dict[str, Any], user_profile: UserProfile) 
         now_iso = _now_iso()
 
         # Calculate deadline_timestamp
+        deadline_timestamp = None
         try:
             if deadline and len(deadline) == 10:
                 dt = datetime.strptime(deadline, "%Y-%m-%d")
@@ -114,11 +118,8 @@ def convert_to_scholarship(opp_data: Dict[str, Any], user_profile: UserProfile) 
             elif deadline:
                 dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
                 deadline_timestamp = int(dt.timestamp())
-            else:
-                 # Default 30 days
-                deadline_timestamp = int(datetime.utcnow().timestamp()) + (30 * 24 * 3600)
         except Exception:
-             deadline_timestamp = int(datetime.utcnow().timestamp()) + (30 * 24 * 3600)
+            deadline_timestamp = None
 
         # Generate STABLE ID using Flink processor's hash function
         from app.services.flink_processor import generate_opportunity_id

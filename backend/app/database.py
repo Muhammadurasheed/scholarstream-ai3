@@ -75,10 +75,47 @@ class FirebaseDB:
     
     # Scholarship Operations
     async def save_scholarship(self, scholarship: Scholarship) -> bool:
-        """Save scholarship to Firestore"""
+        """Save scholarship to Firestore.
+
+        V2 FIX: Merge-write with field-level preservation so "fast"/thin scrapes
+        never overwrite richer "deep" data (prize pools, deadlines, descriptions).
+        """
         try:
             doc_ref = self.db.collection('scholarships').document(scholarship.id)
-            doc_ref.set(scholarship.model_dump())
+
+            incoming = scholarship.model_dump()
+            existing_doc = doc_ref.get()
+
+            if existing_doc.exists:
+                existing = existing_doc.to_dict() or {}
+
+                def _is_placeholder_amount_display(v: Any) -> bool:
+                    s = str(v or '').strip().lower()
+                    return s in {'', '$0', '0', 'see details', 'see listing', 'tbd', 'unknown', 'varies', 'prizes + swag (view details)'}
+
+                # Preserve richer fields from existing if incoming is empty/placeholder.
+                if float(incoming.get('amount') or 0) <= 0 and float(existing.get('amount') or 0) > 0:
+                    incoming['amount'] = existing.get('amount')
+
+                if _is_placeholder_amount_display(incoming.get('amount_display')) and not _is_placeholder_amount_display(existing.get('amount_display')):
+                    incoming['amount_display'] = existing.get('amount_display')
+
+                if not incoming.get('deadline') and existing.get('deadline'):
+                    incoming['deadline'] = existing.get('deadline')
+                    incoming['deadline_timestamp'] = existing.get('deadline_timestamp')
+
+                if (not (incoming.get('description') or '').strip()) and (existing.get('description') or '').strip():
+                    incoming['description'] = existing.get('description')
+
+                # Union tags/geo/type tags for better UX.
+                for key in ['tags', 'geo_tags', 'type_tags']:
+                    inc = incoming.get(key) or []
+                    ex = existing.get(key) or []
+                    if isinstance(inc, list) and isinstance(ex, list):
+                        incoming[key] = list(dict.fromkeys([*ex, *inc]))
+
+            # Merge write to avoid wiping fields that the incoming model doesn't include.
+            doc_ref.set(incoming, merge=True)
             logger.info("Scholarship saved", scholarship_id=scholarship.id, title=scholarship.title)
             return True
         except Exception as e:

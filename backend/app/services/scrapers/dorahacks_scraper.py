@@ -7,12 +7,14 @@ import asyncio
 import re
 import hashlib
 import structlog
+import sys
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from playwright.async_api import async_playwright, Page, Browser
 
 from app.database import db
 from app.models import Scholarship
+from app.services.flink_processor import generate_opportunity_id
 from app.services.kafka_config import KafkaConfig, kafka_producer_manager
 
 logger = structlog.get_logger()
@@ -261,21 +263,27 @@ class DoraHacksDeepScraper:
                     opportunity = await self.extract_hackathon_details(page, url)
                     if opportunity and opportunity.get('title'):
                         title_safe = opportunity['title'].encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding)
-                        # Generate consistent ID for the opportunity
-                        opp_id = hashlib.md5(url.encode()).hexdigest()[:16]
-                        opportunity['id'] = opp_id
+
+                        # Generate consistent stable ID (align with the rest of the platform)
+                        stable_id = generate_opportunity_id({
+                            'url': opportunity.get('url') or opportunity.get('source_url') or url,
+                            'name': opportunity.get('title') or opportunity.get('name'),
+                            'organization': opportunity.get('organization') or 'DoraHacks'
+                        })
+                        opportunity['id'] = stable_id
                         opportunities.append(opportunity)
-                        
-                        # DIRECT SAVE to Firestore (bypass Kafka for immediate availability)
+
+                        # DIRECT SAVE to Firestore (immediate availability)
                         try:
                             scholarship = Scholarship(
-                                id=opp_id,
+                                id=stable_id,
                                 name=opportunity['title'],
                                 title=opportunity['title'],
                                 organization=opportunity['organization'],
                                 amount=opportunity['amount'],
                                 amount_display=opportunity['amount_display'],
                                 deadline=opportunity['deadline'],
+                                deadline_timestamp=opportunity.get('deadline_timestamp'),
                                 description=opportunity['description'],
                                 url=opportunity['url'],
                                 source_url=opportunity['source_url'],
