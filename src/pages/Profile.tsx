@@ -17,7 +17,7 @@ import { updatePassword, updateEmail, EmailAuthProvider, reauthenticateWithCrede
 import {
   User, GraduationCap, FileText, Bell, Settings,
   Upload, Download, Trash2, Eye, Award, Calendar,
-  Shield, Mail, Lock, AlertTriangle
+  Shield, Mail, Lock, AlertTriangle, Plus, Pencil, ExternalLink, Briefcase, Code
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -704,17 +704,162 @@ export default function Profile() {
                     </CardContent>
                   </Card>
 
+                  {/* Projects Section */}
                   <Card className="md:col-span-2">
                     <CardHeader>
-                      <CardTitle>Project Portfolio</CardTitle>
-                      <CardDescription>
-                        Add detailed projects to power the AI's "Experience" mapping.
-                      </CardDescription>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Code className="w-5 h-5" />
+                            Project Portfolio
+                          </CardTitle>
+                          <CardDescription>
+                            Add detailed projects to power the AI's "Experience" mapping.
+                          </CardDescription>
+                        </div>
+                        <Button onClick={() => {
+                          setCurrentProject({});
+                          setTechStackInput('');
+                          setShowProjectDialog(true);
+                        }} size="sm">
+                          <Plus className="w-4 h-4 mr-1" /> Add Project
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-sm text-muted-foreground italic text-center p-4 border rounded border-dashed">
-                        Projects and Experience builder coming in next update. Use Bio and Skills for now.
+                      {(!profile?.projects || profile.projects.length === 0) ? (
+                        <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                          <Code className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground mb-2">No projects added yet</p>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setCurrentProject({});
+                            setTechStackInput('');
+                            setShowProjectDialog(true);
+                          }}>
+                            <Plus className="w-4 h-4 mr-1" /> Add Your First Project
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {profile.projects.map((project) => (
+                            <div key={project.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold">{project.title}</h4>
+                                    {project.url && (
+                                      <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                  </div>
+                                  {project.role && (
+                                    <p className="text-sm text-muted-foreground">{project.role}</p>
+                                  )}
+                                  <p className="text-sm mt-2">{project.description}</p>
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {project.techStack?.map((tech, i) => (
+                                      <Badge key={i} variant="secondary" className="text-xs">{tech}</Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => {
+                                    setCurrentProject(project);
+                                    setTechStackInput(project.techStack?.join(', ') || '');
+                                    setShowProjectDialog(true);
+                                  }}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => {
+                                    setProfile(prev => prev ? {
+                                      ...prev,
+                                      projects: prev.projects?.filter(p => p.id !== project.id)
+                                    } : null);
+                                  }}>
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Work Experience Section */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Briefcase className="w-5 h-5" />
+                            Work Experience
+                          </CardTitle>
+                          <CardDescription>
+                            Add internships, jobs, and volunteer work.
+                          </CardDescription>
+                        </div>
+                        <Button onClick={() => {
+                          setCurrentExperience({});
+                          setShowExperienceDialog(true);
+                        }} size="sm">
+                          <Plus className="w-4 h-4 mr-1" /> Add Experience
+                        </Button>
                       </div>
+                    </CardHeader>
+                    <CardContent>
+                      {(!profile?.experience || profile.experience.length === 0) ? (
+                        <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                          <Briefcase className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground mb-2">No experience added yet</p>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setCurrentExperience({});
+                            setShowExperienceDialog(true);
+                          }}>
+                            <Plus className="w-4 h-4 mr-1" /> Add Your First Experience
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {profile.experience.map((exp) => (
+                            <div key={exp.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold">{exp.role}</h4>
+                                    {exp.current && (
+                                      <Badge variant="default" className="text-xs">Current</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{exp.company}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {exp.startDate} — {exp.current ? 'Present' : exp.endDate}
+                                  </p>
+                                  <p className="text-sm mt-2">{exp.description}</p>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => {
+                                    setCurrentExperience(exp);
+                                    setShowExperienceDialog(true);
+                                  }}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => {
+                                    setProfile(prev => prev ? {
+                                      ...prev,
+                                      experience: prev.experience?.filter(e => e.id !== exp.id)
+                                    } : null);
+                                  }}>
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -1151,6 +1296,261 @@ export default function Profile() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Project Dialog */}
+      <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{currentProject.id ? 'Edit Project' : 'Add New Project'}</DialogTitle>
+            <DialogDescription>
+              Add details about your project to help the AI understand your experience.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="projectTitle">Project Title *</Label>
+              <Input
+                id="projectTitle"
+                placeholder="e.g., EcoTrack - Carbon Footprint Tracker"
+                value={currentProject.title || ''}
+                onChange={(e) => setCurrentProject(prev => ({ ...prev, title: e.target.value }))}
+                maxLength={100}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectRole">Your Role</Label>
+              <Input
+                id="projectRole"
+                placeholder="e.g., Lead Developer, UI/UX Designer"
+                value={currentProject.role || ''}
+                onChange={(e) => setCurrentProject(prev => ({ ...prev, role: e.target.value }))}
+                maxLength={50}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectDescription">Description *</Label>
+              <textarea
+                id="projectDescription"
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Describe what the project does, the problem it solves, and your contributions..."
+                value={currentProject.description || ''}
+                onChange={(e) => setCurrentProject(prev => ({ ...prev, description: e.target.value }))}
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground text-right">
+                {(currentProject.description?.length || 0)}/500
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectTech">Tech Stack (comma-separated)</Label>
+              <Input
+                id="projectTech"
+                placeholder="e.g., React, Python, Firebase, TensorFlow"
+                value={techStackInput}
+                onChange={(e) => setTechStackInput(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectUrl">Project URL</Label>
+              <Input
+                id="projectUrl"
+                type="url"
+                placeholder="https://github.com/yourname/project"
+                value={currentProject.url || ''}
+                onChange={(e) => setCurrentProject(prev => ({ ...prev, url: e.target.value }))}
+                maxLength={200}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProjectDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (!currentProject.title?.trim() || !currentProject.description?.trim()) {
+                toast({
+                  title: 'Missing required fields',
+                  description: 'Please provide a title and description.',
+                  variant: 'destructive',
+                });
+                return;
+              }
+              
+              const techStack = techStackInput
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+              
+              const projectToSave: Project = {
+                id: currentProject.id || crypto.randomUUID(),
+                title: currentProject.title.trim(),
+                description: currentProject.description.trim(),
+                techStack,
+                role: currentProject.role?.trim(),
+                url: currentProject.url?.trim(),
+              };
+              
+              setProfile(prev => {
+                if (!prev) return null;
+                const existingProjects = prev.projects || [];
+                if (currentProject.id) {
+                  return {
+                    ...prev,
+                    projects: existingProjects.map(p => p.id === currentProject.id ? projectToSave : p)
+                  };
+                }
+                return {
+                  ...prev,
+                  projects: [...existingProjects, projectToSave]
+                };
+              });
+              
+              setShowProjectDialog(false);
+              setCurrentProject({});
+              setTechStackInput('');
+              
+              toast({
+                title: currentProject.id ? 'Project updated' : 'Project added',
+                description: 'Your project has been saved.',
+              });
+            }}>
+              {currentProject.id ? 'Save Changes' : 'Add Project'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Experience Dialog */}
+      <Dialog open={showExperienceDialog} onOpenChange={setShowExperienceDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{currentExperience.id ? 'Edit Experience' : 'Add New Experience'}</DialogTitle>
+            <DialogDescription>
+              Add work experience, internships, or volunteer roles.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="expRole">Role / Position *</Label>
+              <Input
+                id="expRole"
+                placeholder="e.g., Software Engineering Intern"
+                value={currentExperience.role || ''}
+                onChange={(e) => setCurrentExperience(prev => ({ ...prev, role: e.target.value }))}
+                maxLength={100}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expCompany">Company / Organization *</Label>
+              <Input
+                id="expCompany"
+                placeholder="e.g., Google, Local NGO"
+                value={currentExperience.company || ''}
+                onChange={(e) => setCurrentExperience(prev => ({ ...prev, company: e.target.value }))}
+                maxLength={100}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="expStartDate">Start Date *</Label>
+                <Input
+                  id="expStartDate"
+                  type="month"
+                  value={currentExperience.startDate || ''}
+                  onChange={(e) => setCurrentExperience(prev => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="expEndDate">End Date</Label>
+                <Input
+                  id="expEndDate"
+                  type="month"
+                  value={currentExperience.endDate || ''}
+                  onChange={(e) => setCurrentExperience(prev => ({ ...prev, endDate: e.target.value }))}
+                  disabled={currentExperience.current}
+                />
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="expCurrent"
+                checked={currentExperience.current || false}
+                onCheckedChange={(checked) => setCurrentExperience(prev => ({ 
+                  ...prev, 
+                  current: checked,
+                  endDate: checked ? undefined : prev.endDate 
+                }))}
+              />
+              <Label htmlFor="expCurrent">I currently work here</Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expDescription">Description *</Label>
+              <textarea
+                id="expDescription"
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Describe your responsibilities, achievements, and skills used..."
+                value={currentExperience.description || ''}
+                onChange={(e) => setCurrentExperience(prev => ({ ...prev, description: e.target.value }))}
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground text-right">
+                {(currentExperience.description?.length || 0)}/500
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExperienceDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (!currentExperience.role?.trim() || !currentExperience.company?.trim() || !currentExperience.startDate || !currentExperience.description?.trim()) {
+                toast({
+                  title: 'Missing required fields',
+                  description: 'Please fill in all required fields.',
+                  variant: 'destructive',
+                });
+                return;
+              }
+              
+              const experienceToSave: WorkExperience = {
+                id: currentExperience.id || crypto.randomUUID(),
+                role: currentExperience.role.trim(),
+                company: currentExperience.company.trim(),
+                startDate: currentExperience.startDate,
+                endDate: currentExperience.endDate,
+                description: currentExperience.description.trim(),
+                current: currentExperience.current || false,
+              };
+              
+              setProfile(prev => {
+                if (!prev) return null;
+                const existingExperience = prev.experience || [];
+                if (currentExperience.id) {
+                  return {
+                    ...prev,
+                    experience: existingExperience.map(e => e.id === currentExperience.id ? experienceToSave : e)
+                  };
+                }
+                return {
+                  ...prev,
+                  experience: [...existingExperience, experienceToSave]
+                };
+              });
+              
+              setShowExperienceDialog(false);
+              setCurrentExperience({});
+              
+              toast({
+                title: currentExperience.id ? 'Experience updated' : 'Experience added',
+                description: 'Your experience has been saved.',
+              });
+            }}>
+              {currentExperience.id ? 'Save Changes' : 'Add Experience'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
