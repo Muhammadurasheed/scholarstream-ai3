@@ -11,6 +11,9 @@ const WS_URL = API_URL.replace('http', 'ws') + '/ws/opportunities';
 let websocket: WebSocket | null = null;
 let reconnectInterval = 1000;
 let currentAuthToken: string | null = null;
+
+// Initialize on install
+chrome.runtime.onInstalled.addListener(() => {
     console.log("ScholarStream Co-Pilot Installed");
     initializeAuth();
 });
