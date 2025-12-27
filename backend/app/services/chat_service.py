@@ -4,6 +4,7 @@ Real-time conversational AI powered by Gemini
 """
 import google.generativeai as genai
 import json
+import asyncio
 from typing import Dict, Any, List, Optional
 import structlog
 from datetime import datetime, timedelta

@@ -151,7 +151,7 @@ class UniversalCrawlerService:
         
         return context
 
-    async def crawl_and_stream(self, urls: List[str], intent: str = "general"):
+    async def crawl_and_stream(self, urls: List[str], intent: str = "general", mission_id: Optional[str] = None):
         """
         Deploy Hunter Drones to target URLs in parallel batches.
         """
@@ -161,12 +161,12 @@ class UniversalCrawlerService:
         batch_size = 5
         for i in range(0, len(urls), batch_size):
             batch = urls[i:i + batch_size]
-            tasks = [self._crawl_single_target(url, intent) for url in batch]
+            tasks = [self._crawl_single_target(url, intent, mission_id) for url in batch]
             await asyncio.gather(*tasks)
             # Stagger between batches
             await asyncio.sleep(random.uniform(2.0, 4.0))
 
-    async def _crawl_single_target(self, url: str, intent: str):
+    async def _crawl_single_target(self, url: str, intent: str, mission_id: Optional[str] = None):
         """Individual drone mission"""
         context = await self.create_stealth_context()
         try:
@@ -283,14 +283,14 @@ class UniversalCrawlerService:
                 logger.warning("Drone mission aborted: Content too thin (Potential Loading Shell)", url=url, size=len(content))
                 return
             
-            await self._process_success(url, content, title, intent)
+            await self._process_success(url, content, title, intent, mission_id)
             
         except Exception as e:
             logger.error("Drone crash", url=url, error=str(e))
         finally:
             await context.close()
             
-    async def _process_success(self, url: str, html_content: str, title: str, intent: str):
+    async def _process_success(self, url: str, html_content: str, title: str, intent: str, mission_id: Optional[str] = None):
         """Process successful extraction"""
         
         # 1. Clean / Minify HTML (basic) to save bandwidth
@@ -303,7 +303,8 @@ class UniversalCrawlerService:
             "crawled_at": time.time(),
             "source": self._extract_domain(url),
             "intent": intent,
-            "agent_type": "HunterDrone-V1"
+            "agent_type": "HunterDrone-V1",
+            "mission_id": mission_id
         }
         
         if self.kafka_initialized:

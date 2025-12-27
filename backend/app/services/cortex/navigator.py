@@ -95,7 +95,7 @@ class Sentinel:
         
         try:
             # Delegate to the robust Universal Crawler (Playwright)
-            await crawler_service.crawl_and_stream(self.TARGETS, intent="patrol")
+            await crawler_service.crawl_and_stream(self.TARGETS, intent="patrol", mission_id=mission_id)
             discovery_pulse.complete_mission(mission_id, found_count=len(self.TARGETS))
         except Exception as e:
             logger.error("Sentinel patrol mission failed", error=str(e))
@@ -147,7 +147,10 @@ class Scout:
         """
         Execute a targeted search mission.
         """
-        logger.info("Scout dispatching drone squad", mission=query)
+        mission_id = "scout_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        logger.info("Scout dispatching drone squad", mission=query, mission_id=mission_id)
+        
+        discovery_pulse.announce_mission(mission_id, f"Searching: {query}", "active")
         
         # 1. Generate Search URL (DuckDuckGo or Google)
         search_urls = [
@@ -158,7 +161,7 @@ class Scout:
         # 2. Dispatch Drones
         # Note: crawl_and_stream handles browser context and stealth
         try:
-            await crawler_service.crawl_and_stream(search_urls, intent="scout_search")
+            await crawler_service.crawl_and_stream(search_urls, intent="scout_search", mission_id=mission_id)
             return [{"url": u, "status": "dispatched"} for u in search_urls]
         except Exception as e:
             logger.error("Scout mission failed", error=str(e))

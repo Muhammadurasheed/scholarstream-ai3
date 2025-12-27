@@ -89,6 +89,10 @@ class EnrichmentWorker:
                 start_time = time.time()
                 opportunities = []
                 
+                # Extract identifiers from the batch
+                urls = [m.get("url") for m in batch_messages if m.get("url")]
+                mission_id = batch_messages[0].get("mission_id") if batch_messages else None
+                
                 # Check for pre-extracted data in batch
                 pre_extracted = [m.get("extracted_data") for m in batch_messages if m.get("extracted_data")]
                 
@@ -102,12 +106,14 @@ class EnrichmentWorker:
                 duration = time.time() - start_time
                 
                 if not opportunities:
-                    logger.warning(f"No opportunities extracted from target", duration=f"{duration:.2f}s", url=urls[0])
-                    discovery_pulse.complete_mission(mission_id, found_count=0)
+                    logger.warning(f"No opportunities extracted from target", duration=f"{duration:.2f}s", url=urls[0] if urls else "unknown")
+                    if mission_id:
+                        discovery_pulse.complete_mission(mission_id, found_count=0)
                     continue
                     
-                logger.info(f"Discovery Yield: {len(opportunities)} items", duration=f"{duration:.2f}s", url=urls[0], source="pre-extracted" if pre_extracted else "ai")
-                discovery_pulse.complete_mission(mission_id, found_count=len(opportunities))
+                logger.info(f"Discovery Yield: {len(opportunities)} items", duration=f"{duration:.2f}s", url=urls[0] if urls else "unknown", source="pre-extracted" if pre_extracted else "ai")
+                if mission_id:
+                    discovery_pulse.complete_mission(mission_id, found_count=len(opportunities))
 
                 # PUBLISH RESULTS
                 for opp in opportunities:
@@ -117,7 +123,7 @@ class EnrichmentWorker:
                         'raw_data': {}, 
                         'enriched_at': time.time(),
                         'ai_model': settings.gemini_model,
-                        'origin_url': opp.get('url') or urls[0]
+                        'origin_url': opp.get('url') or (urls[0] if urls else None)
                     }
                     
                     kafka_producer_manager.publish_to_stream(
