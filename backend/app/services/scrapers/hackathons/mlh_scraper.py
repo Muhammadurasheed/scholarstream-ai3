@@ -143,6 +143,44 @@ def parse_mlh_html(html: str) -> List[Dict[str, Any]]:
         return []
 
 
+def _parse_mlh_date_text(date_text: str) -> Optional[datetime]:
+    """Parse MLH card date text like 'Jan 10 – 12, 2026' or 'Jan 10, 2026'.
+
+    Returns the END date when a range is provided (that's when the hackathon ends).
+    """
+    if not date_text:
+        return None
+
+    # Normalize dashes
+    t = date_text.replace('\u2013', '-').replace('–', '-').strip()
+
+    # Pattern 1: "Jan 10 - 12, 2026" or "January 10 - 12, 2026" (date range, same month)
+    m = re.search(r'([A-Za-z]+)\s+(\d{1,2})\s*-\s*(\d{1,2}),?\s*(\d{4})', t)
+    if m:
+        month, _start_day, end_day, year = m.group(1), m.group(2), m.group(3), m.group(4)
+        for fmt in ['%b %d %Y', '%B %d %Y']:
+            try:
+                return datetime.strptime(f"{month} {end_day} {year}", fmt)
+            except ValueError:
+                continue
+
+    # Pattern 2: "Jan 10, 2026" / "January 10, 2026" (single date)
+    for fmt in ['%b %d, %Y', '%B %d, %Y', '%b %d %Y', '%B %d %Y']:
+        try:
+            return datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+
+    # Pattern 3: "10 Jan 2026" / "10 January 2026"
+    for fmt in ['%d %b %Y', '%d %B %Y']:
+        try:
+            return datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+
+    return None
+
+
 def transform_mlh_event(event: Dict[str, Any]) -> Optional[Scholarship]:
     """
     Transform MLH event data to Scholarship model.
@@ -150,25 +188,25 @@ def transform_mlh_event(event: Dict[str, Any]) -> Optional[Scholarship]:
     try:
         name = event.get('name', '') or event.get('title', '')
         url = event.get('url', '') or event.get('website', '') or event.get('link', '')
-        
+
         if not name:
             return None
-        
+
         if not url or not url.startswith('http'):
             # Create MLH-style URL
             slug = name.lower().replace(' ', '-').replace('.', '')
             url = f"https://mlh.io/events/{slug}"
-        
+
         # Parse dates
         deadline = None
         deadline_timestamp = None
-        
-        # Try different date fields
+
+        # Try different date fields first
         end_date = event.get('end_date') or event.get('endDate') or event.get('end')
         start_date = event.get('start_date') or event.get('startDate') or event.get('start')
-        
+
         date_to_use = end_date or start_date
-        
+
         if date_to_use:
             try:
                 if isinstance(date_to_use, str):
@@ -183,13 +221,21 @@ def transform_mlh_event(event: Dict[str, Any]) -> Optional[Scholarship]:
                         deadline_dt = datetime.fromisoformat(date_to_use.replace('Z', '+00:00'))
                 else:
                     deadline_dt = datetime.fromtimestamp(date_to_use / 1000 if date_to_use > 1e10 else date_to_use)
-                
+
                 deadline = deadline_dt.strftime('%Y-%m-%d')
                 deadline_timestamp = int(deadline_dt.timestamp())
-                
+
             except Exception:
                 pass
-        
+
+        # V3 FIX: If no structured date fields, parse the card's date_text (e.g., "Jan 10 – 12, 2026")
+        if not deadline:
+            dt = _parse_mlh_date_text(str(event.get('date_text') or ''))
+            if dt:
+                deadline = dt.strftime('%Y-%m-%d')
+                deadline_timestamp = int(dt.timestamp())
+                logger.debug(f"MLH date_text parsed: {event.get('date_text')} -> {deadline}")
+
         location = event.get('location', '') or event.get('city', 'TBD')
         is_online = event.get('is_online', False) or 'online' in str(location).lower() or 'virtual' in str(location).lower()
         

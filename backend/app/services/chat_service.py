@@ -99,10 +99,10 @@ class ChatService:
                 # Add opportunities to prompt for AI context
                 if opportunities:
                     system_prompt += f"\n\nSEARCH RESULTS ({len(opportunities)} found):\n"
-                    # UPGRADED: Show MORE results in emergency to give the student more options
-                    limit = 10 if is_emergency else 8
+                    # V3: ALWAYS show at least 12 opportunities to AI for comprehensive recommendations
+                    limit = 12
                     for i, opp in enumerate(opportunities[:limit], 1):
-                        system_prompt += f"\n{i}. **{opp.get('name')}** - {opp.get('amount_display', '$0')}\n"
+                        system_prompt += f"\n{i}. **{opp.get('name')}** - {opp.get('amount_display', 'See details')}\n"
                         system_prompt += f"   - Organization: {opp.get('organization')}\n"
                         system_prompt += f"   - Match Score: {opp.get('match_score')}%\n"
                         system_prompt += f"   - Deadline: {opp.get('deadline') or 'Check listing'}\n"
@@ -141,7 +141,7 @@ class ChatService:
             return {
                 'message': ai_message,
                 'thinking_process': thinking_section,  # V2: Separate for frontend streaming
-                'opportunities': opportunities[:10] if opportunities else [],
+                'opportunities': opportunities[:12] if opportunities else [],  # V3: Always return up to 12
                 'actions': self._generate_actions(opportunities, message),
                 'search_stats': search_stats
             }
@@ -204,7 +204,7 @@ If user mentions stress about school fees, tuition, or urgent financial need:
 
 RESPONSE FORMAT:
 1. **Acknowledge their situation** (especially if stressed)
-2. **List 5-10 matching opportunities** from SEARCH RESULTS
+2. **List AT LEAST 10 matching opportunities** from SEARCH RESULTS (show ALL provided results)
 3. **Explain WHY each matches** (interests, skills, deadline)
 4. **Provide actionable next steps**
 
@@ -424,12 +424,12 @@ If NO SEARCH RESULTS are found:
                 
                 filtered_opps.append(opp)
             
-            # V2 FIX: Real-time match score recalculation
+            # V3 FIX: Real-time match score recalculation + diversity interleaving
             results = []
-            for opp in filtered_opps[:30]:  # Limit to 30
+            for opp in filtered_opps[:50]:  # Increased limit for diversity pool
                 # Build opportunity dict for personalization engine
                 opp_dict = opp.model_dump() if hasattr(opp, 'model_dump') else opp.dict() if hasattr(opp, 'dict') else {}
-                
+
                 # V2 FIX: Calculate fresh match score
                 fresh_score = 50  # Default
                 if user_profile_obj:
@@ -440,7 +440,7 @@ If NO SEARCH RESULTS are found:
                         fresh_score = opp.match_score or 50
                 elif opp.match_score:
                     fresh_score = opp.match_score
-                
+
                 results.append({
                     'id': opp.id,
                     'name': opp.name,
@@ -456,27 +456,31 @@ If NO SEARCH RESULTS are found:
                     'location_eligibility': self._get_location_string(opp),
                     'priority_level': opp.priority_level
                 })
-            
-            # Sort by fresh match score
+
+            # Sort by fresh match score (relevance-first)
             results.sort(key=lambda x: x.get('match_score', 0), reverse=True)
-            results = results[:15]
+
+            # V3 FIX: Relevance-first diversity interleaving
+            # Guarantees at least 12 results with light source/type diversity.
+            final_results = self._interleave_for_diversity(results, target_count=12)
             
             logger.info(
-                "Search V2 completed",
+                "Search V3 completed",
                 total_scanned=stats['total_scanned'],
-                final_matches=len(results),
+                final_matches=len(final_results),
                 expired_filtered=stats['expired'],
                 location_filtered=stats['location_filtered']
             )
-            
-            # EMERGENCY RECOVERY: If 0 results for crisis, broaden and retry ONCE
-            if not results and depth == 0 and (criteria.get('urgency') != 'any' or criteria.get('location') != 'any'):
-                logger.info("CRISIS RECOVERY: Broadening search criteria")
+
+            # EMERGENCY RECOVERY: If <10 results for crisis, broaden and retry ONCE
+            if len(final_results) < 10 and depth == 0:
+                logger.info("CRISIS RECOVERY: Broadening search criteria for more results")
                 broader_criteria = criteria.copy()
                 broader_criteria['urgency'] = 'any'
-                broader_criteria['broadened'] = True # Flag for the thinking process
+                broader_criteria['broadened'] = True  # Flag for the thinking process
                 return await self._search_opportunities_with_stats(broader_criteria, profile, depth=1)
-            return results, stats
+
+            return final_results, stats
             
         except Exception as e:
             logger.error("Search failed", error=str(e))
@@ -484,12 +488,66 @@ If NO SEARCH RESULTS are found:
             traceback.print_exc()
             return [], stats
     
+    def _interleave_for_diversity(self, sorted_results: List[Dict], target_count: int = 12) -> List[Dict]:
+        """Relevance-first diversity interleaving.
+
+        Strategy:
+        - First 6 slots: pure relevance (highest match scores)
+        - Remaining slots: interleave from under-represented types/sources while still
+          preferring higher scores within each bucket.
+
+        This guarantees variety without sacrificing match quality for top picks.
+        """
+        if len(sorted_results) <= target_count:
+            return sorted_results
+
+        final = []
+        used_ids = set()
+
+        # Phase 1: Top 6 by pure relevance
+        for item in sorted_results[:6]:
+            final.append(item)
+            used_ids.add(item['id'])
+
+        # Phase 2: Build buckets by type
+        buckets: Dict[str, List[Dict]] = {}
+        for item in sorted_results:
+            if item['id'] in used_ids:
+                continue
+            t = item.get('type', 'scholarship')
+            buckets.setdefault(t, []).append(item)
+
+        # Round-robin from buckets until we reach target_count
+        bucket_keys = list(buckets.keys())
+        idx = 0
+        while len(final) < target_count and bucket_keys:
+            key = bucket_keys[idx % len(bucket_keys)]
+            if buckets[key]:
+                item = buckets[key].pop(0)
+                final.append(item)
+                used_ids.add(item['id'])
+            else:
+                bucket_keys.remove(key)
+                if not bucket_keys:
+                    break
+            idx += 1
+
+        # If still short, fill from remaining sorted_results
+        for item in sorted_results:
+            if len(final) >= target_count:
+                break
+            if item['id'] not in used_ids:
+                final.append(item)
+                used_ids.add(item['id'])
+
+        return final
+
     def _infer_type(self, opp) -> str:
         """Infer opportunity type from tags/description"""
         tags_str = ' '.join(opp.tags or []).lower()
         desc_str = (opp.description or '').lower()
         combined = f"{tags_str} {desc_str}"
-        
+
         if 'hackathon' in combined or 'hack' in combined:
             return 'hackathon'
         elif 'bounty' in combined or 'bug' in combined:
