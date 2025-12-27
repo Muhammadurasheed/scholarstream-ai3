@@ -163,39 +163,59 @@ class ChatService:
         return any(t in message.lower() for t in triggers)
 
     def _build_system_prompt(self, context: Dict[str, Any]) -> str:
-        """Build context-rich system prompt"""
+        """Build context-rich system prompt - V2: GLOBAL-FIRST approach"""
         profile = context.get('user_profile', {})
         page = context.get('current_page', 'unknown')
         
-        prompt = f"""You are ScholarStream Assistant, an expert financial opportunity advisor for students.
+        # Detect user's actual location context
+        user_country = profile.get('country', '')
+        user_school = profile.get('school', '')
+        
+        prompt = f"""You are ScholarStream Assistant, an expert **GLOBAL** opportunity advisor for students worldwide.
 
 STUDENT PROFILE:
 - Name: {profile.get('name', 'Student')}
 - Major: {profile.get('major', 'Unknown')}
-- Location: {profile.get('city', '')}, {profile.get('state', '')}, {profile.get('country', 'United States')}
+- School: {user_school}
+- Location: {profile.get('city', '')}, {profile.get('state', '')}, {user_country}
 - Interests: {', '.join(profile.get('interests', []))}
+- Background: {', '.join(profile.get('background', []))}
 
-YOUR GOAL:
-Provide accurate, trustworthy, and transparent assistance. You MUST explain your thought process.
+CRITICAL GLOBAL CONTEXT:
+🌍 **ScholarStream serves students WORLDWIDE** - from Nigeria to Japan to Brazil.
+🎯 **Hackathons, Bounties, and Tech Competitions are ALWAYS GLOBAL** - no location restrictions.
+   - DevPost hackathons: Open to ALL countries
+   - DoraHacks: Open to ALL countries  
+   - MLH: Open to ALL students (mostly online)
+   - Bug bounties (Intigriti, HackerOne): Open to ALL
+   - Superteam bounties: Open to ALL (crypto/Solana)
 
 RESPONSE GUIDELINES:
-1. **Transparency**: Always start by briefly explaining what you searched for or how you analyzed the request.
-2. **Accuracy**: NEVER hallucinate opportunities. Only discuss the ones provided in the SEARCH RESULTS section.
-3. **Formatting**: Use Markdown effectively.
-   - Use **bold** for key terms.
-   - Use bullet points for lists.
-   - Use > blockquotes for important tips.
-4. **Tone**: Professional yet encouraging.
+1. **NEVER say you can't help due to location** - especially for hackathons/bounties.
+2. **Software developers from ANY country can apply to tech opportunities.**
+3. **Nigerian students CAN apply to DevPost, DoraHacks, MLH, and all online hackathons.**
+4. **Only location-restricted: Some US scholarships require US residency (mark these clearly).**
 
-If SEARCH RESULTS are provided:
-- Summarize the top 2-3 matches.
-- Explain WHY they match the student's profile (e.g., "Matches your location in {profile.get('state', 'your area')}" or "Aligns with your interest in {profile.get('major', 'your major')}").
-- Mention the deadline clearly.
+If user mentions stress about school fees, tuition, or urgent financial need:
+- Prioritize bounties and hackathons with PRIZE MONEY
+- These are fast-turnaround and globally accessible
+- Show opportunities with nearest deadlines first
 
-IMPORTANT: You HAVE access to these opportunities. They are from our internal database. DO NOT say you cannot search or access external databases. Use the provided SEARCH RESULTS as your source of truth.
+RESPONSE FORMAT:
+1. **Acknowledge their situation** (especially if stressed)
+2. **List 5-10 matching opportunities** from SEARCH RESULTS
+3. **Explain WHY each matches** (interests, skills, deadline)
+4. **Provide actionable next steps**
+
+IMPORTANT: 
+- You HAVE access to opportunities. They are from our database.
+- DO NOT say "I cannot help with opportunities outside [country]"
+- DO NOT limit results to US-only for hackathons/bounties
+- Use the provided SEARCH RESULTS as your source of truth.
 
 If NO SEARCH RESULTS are found:
-- Be honest that our *current database* doesn't have matches, but suggest broadening the search or checking back later.
+- Suggest the user check back soon (we update daily)
+- Recommend they explore DevPost.com, DoraHacks.io, MLH.io directly
 """
         return prompt
     
@@ -292,11 +312,29 @@ If NO SEARCH RESULTS are found:
             now = datetime.now()
             user_profile_obj = UserProfile(**profile) if profile else None
             
-            # Detect Nigerian context for UI/Ibadan
-            school_str = str(profile.get('school', '')).lower()
-            is_nigeria = 'nigeria' in str(profile.get('country', '')).lower() or 'ibadan' in school_str or 'nigeria' in school_str
+            # V2 FIX: Expanded Nigerian institution detection
+            NIGERIAN_INSTITUTIONS = [
+                'ibadan', 'lagos', 'unilag', 'ui', 'oau', 'ife', 'covenant', 'babcock', 
+                'afe babalola', 'lautech', 'futa', 'unn', 'nsukka', 'benin', 'uniben',
+                'abu', 'zaria', 'ahmadu bello', 'obafemi awolowo', 'noun', 'uniport',
+                'delsu', 'eksu', 'funaab', 'futo', 'uniuyo', 'unical', 'buk', 'bayero'
+            ]
             
-            user_country = (profile.get('country') or ('Nigeria' if is_nigeria else 'United States')).lower()
+            school_str = str(profile.get('school', '')).lower()
+            country_str = str(profile.get('country', '')).lower()
+            
+            # Detect Nigerian context more broadly
+            is_nigeria = (
+                'nigeria' in country_str or 
+                any(inst in school_str for inst in NIGERIAN_INSTITUTIONS) or
+                'nigeria' in school_str
+            )
+            
+            # Also detect other African countries for similar treatment
+            AFRICAN_COUNTRIES = ['nigeria', 'kenya', 'ghana', 'south africa', 'egypt', 'rwanda', 'ethiopia', 'tanzania', 'uganda']
+            is_african = any(country in country_str for country in AFRICAN_COUNTRIES) or is_nigeria
+            
+            user_country = (profile.get('country') or ('Nigeria' if is_nigeria else '')).lower()
             user_state = (profile.get('state') or '').lower()
             user_interests = [i.lower() for i in (profile.get('interests') or [])]
             
@@ -336,31 +374,36 @@ If NO SEARCH RESULTS are found:
                 
                 # V2 FIX: Global/Remote/International opportunities accessible to ALL
                 is_global = any(tag in geo_tags for tag in ['global', 'remote', 'international', 'online', 'worldwide']) or \
-                            any(kw in location_str for kw in ['global', 'international', 'worldwide', 'anywhere', 'remote'])
+                            any(kw in location_str for kw in ['global', 'international', 'worldwide', 'anywhere', 'remote', 'virtual'])
                 
-                is_open_citizenship = not opp_citizenship or opp_citizenship in ['any', 'international', 'all']
+                is_open_citizenship = not opp_citizenship or opp_citizenship in ['any', 'international', 'all', '']
                 
-                # Only filter if explicitly restricted AND user doesn't match
-                location_restricted = False
-                if opp_states and user_state:
-                    if not any(user_state in s for s in opp_states):
-                        if not is_global:
-                            location_restricted = True
-                
-                if opp_citizenship and opp_citizenship not in ['any', 'international', 'all']:
-                    if user_country and user_country not in opp_citizenship:
-                        if not is_global:
-                            # Nigerian context hard-match
-                            if not (is_nigeria and any(kw in location_str for kw in ['nigeria', 'africa', 'developing'])):
-                                location_restricted = True
-                
-                # V2: Hackathons/Bounties are almost always global
-                if opp_type in ['hackathon', 'bounty', 'competition']:
+                # V2 FIX: HACKATHONS, BOUNTIES, COMPETITIONS are ALWAYS GLOBAL
+                # This is the critical fix - these opportunity types have NO location restrictions
+                if opp_type in ['hackathon', 'bounty', 'competition', 'challenge']:
+                    # ALWAYS include - no location filter for tech opportunities
+                    pass  # Continue to add to filtered_opps
+                else:
+                    # Only filter scholarships with explicit location restrictions
                     location_restricted = False
-                
-                if location_restricted:
-                    stats['location_filtered'] += 1
-                    continue
+                    
+                    # Check state restriction (only for scholarships)
+                    if opp_states and user_state:
+                        if not any(user_state in s for s in opp_states):
+                            if not is_global:
+                                location_restricted = True
+                    
+                    # Check citizenship restriction (only for scholarships)
+                    if opp_citizenship and opp_citizenship not in ['any', 'international', 'all', '']:
+                        if user_country and user_country not in opp_citizenship:
+                            if not is_global:
+                                # Allow if user is from developing countries and opp mentions development/international
+                                if not (is_african and any(kw in location_str for kw in ['africa', 'developing', 'international', 'global'])):
+                                    location_restricted = True
+                    
+                    if location_restricted:
+                        stats['location_filtered'] += 1
+                        continue
                 
                 # 4. URGENCY FILTER
                 urgency = criteria.get('urgency', 'any')

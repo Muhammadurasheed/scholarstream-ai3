@@ -96,15 +96,15 @@ class PersonalizationEngine:
         except Exception:
              pass
         
-        # V2 FIX: NO ARTIFICIAL FLOOR - Return true score
-        # Only apply minimum of 10% for non-zero profiles to avoid "0%" display
+        # V2 FIX: NO ARTIFICIAL FLOOR - Return true dynamic score
         user_interests = self._get_attr(user_profile, 'interests') or []
         if not user_interests:
-            # Empty profile gets base 40% (neutral)
-            return max(score, 40.0)
+            # Empty profile: return actual calculated score (no floor)
+            # This encourages users to complete their profile
+            return float(int(max(min(score, max_score), 5.0)))  # 5% minimum for UI display
         
-        # For users with profiles, show true score (minimum 10% for UI)
-        return float(int(max(min(score, max_score), 10.0)))
+        # For users with profiles, show true calculated score
+        return float(int(max(min(score, max_score), 5.0)))
     
     def _score_interests(self, opp: Dict[str, Any], profile: Any) -> float:
         """Score based on user interests (0-100) - FIXED: No duplicate definition"""
@@ -147,14 +147,17 @@ class PersonalizationEngine:
         if match_rate > 0.75:
             match_rate = min(match_rate * 1.2, 1.0)
             
-        # Elite Minimum: If ANY keyword strictly matches a primary interest, floor at 60
-        if satisfied_interests > 0:
-            match_rate = max(match_rate, 0.6)
+        # V2 FIX: REMOVED 60% FLOOR - True dynamic scoring
+        # If user has interests but none match, score should be low (not artificially boosted)
+        # Only give a small boost (20%) if at least one interest matches
+        if satisfied_interests > 0 and match_rate < 0.2:
+            match_rate = 0.2  # Minimal match = 20%, not 60%
             
         logger.debug(
-            "Interest scoring V2",
+            "Interest scoring V2 - DYNAMIC",
             user_interests=user_interests,
             matched=matched_details,
+            satisfied=satisfied_interests,
             rate=round(match_rate, 2)
         )
         

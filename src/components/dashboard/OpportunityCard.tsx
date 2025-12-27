@@ -207,12 +207,12 @@ export const OpportunityCard = ({
       return prizeTag;
     }
     
-    // Default for hackathons/bounties vs scholarships
+    // V2 FIX: Better call-to-action instead of generic text
     const type = inferType();
     if (type === 'hackathon' || type === 'bounty') {
-      return 'Prizes + Swag';
+      return 'View Prizes →';
     }
-    return 'See Details';
+    return 'View Details →';
   };
   
   const displayAmount = getDisplayAmount();

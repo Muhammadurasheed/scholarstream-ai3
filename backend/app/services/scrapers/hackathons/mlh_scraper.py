@@ -193,30 +193,48 @@ def transform_mlh_event(event: Dict[str, Any]) -> Optional[Scholarship]:
         location = event.get('location', '') or event.get('city', 'TBD')
         is_online = event.get('is_online', False) or 'online' in str(location).lower() or 'virtual' in str(location).lower()
         
+        # V2 FIX: Better prize display for MLH events
+        # MLH hackathons typically have sponsor prizes ($500-$5000+ per category)
+        # Also include swag (MLH is known for great swag packages)
+        prize_info = event.get('prizes', [])
+        prize_amount = 0
+        prize_display = 'View Prizes →'  # Default with call-to-action
+        
+        if prize_info:
+            # If we have prize data, sum it up
+            total = sum(p.get('value', 0) for p in prize_info if isinstance(p, dict))
+            if total > 0:
+                prize_amount = total
+                prize_display = f'${total:,} in prizes'
+        else:
+            # MLH events always have sponsor prizes even if not explicitly listed
+            # Typical MLH hackathon has $1000-$10000 in prizes + swag
+            prize_display = 'Prizes + Swag (View Details)'
+        
         opportunity_data = {
             'id': '',
             'name': name,
             'title': name,
             'organization': 'Major League Hacking (MLH)',
-            'amount': 0,  # MLH hackathons have sponsor prizes
-            'amount_display': 'Prizes + Swag',
+            'amount': prize_amount,
+            'amount_display': prize_display,
             'deadline': deadline,
             'deadline_timestamp': deadline_timestamp,
             'source_url': url,
-            'description': f"MLH hackathon at {location}. Join students from around the world to build, learn, and share. MLH is the official student hackathon league.",
-            'tags': ['Hackathon', 'MLH', 'Student', 'Online' if is_online else 'In-Person'],
-            'geo_tags': ['Global', 'Online'] if is_online else [location, 'United States'],
-            'type_tags': ['Hackathon'],
+            'description': f"MLH hackathon at {location}. Join students from around the world to build, learn, and share. MLH is the official student hackathon league. Open to students globally - virtual participation often available.",
+            'tags': ['Hackathon', 'MLH', 'Student', 'Global', 'Online' if is_online else 'In-Person'],
+            'geo_tags': ['Global', 'International', 'Online'] if is_online else ['Global', location],
+            'type_tags': ['Hackathon', 'Competition'],
             'eligibility': {
                 'gpa_min': None,
                 'majors': [],
                 'states': [],
-                'citizenship': 'any',
+                'citizenship': 'any',  # V2: Explicitly global
                 'grade_levels': ['High School', 'Undergraduate', 'Graduate']
             },
-            'eligibility_text': 'Open to high school and university students',
+            'eligibility_text': 'Open to all students worldwide (high school and university)',
             'source_type': 'mlh',
-            'match_score': 0.0,
+            'match_score': 0.0,  # Will be calculated dynamically
             'match_tier': 'Good',
             'verified': True,
             'last_verified': datetime.now().isoformat(),

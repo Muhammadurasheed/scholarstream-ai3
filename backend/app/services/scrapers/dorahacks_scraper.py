@@ -105,17 +105,21 @@ class DoraHacksDeepScraper:
             # Extract hackathon name from title (usually "Name | DoraHacks")
             hackathon_name = title.split('|')[0].strip() if '|' in title else title
             
-            # Extract prize pool using multiple strategies
+            # V2 FIX: Enhanced prize extraction with more patterns
             prize_amount = 0
-            prize_display = "See Details"
+            prize_display = "View Prize Details →"  # Better call-to-action
             
-            # Strategy 1: Look for Prize Pool text patterns
+            # Strategy 1: Look for Prize Pool text patterns (expanded)
             prize_patterns = [
-                r'Prize\s*Pool[:\s]*\$?([\d,]+(?:\.\d+)?)\s*(USD|USDC|USDT)?',
-                r'Total\s*Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*(USD|USDC|USDT)?',
-                r'Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*(USD|USDC|USDT)?',
-                r'\$\s*([\d,]+(?:\.\d+)?)\s*(?:in\s+)?(?:prizes?|pool|USD)',
-                r'([\d,]+)\s*USD\s*(?:Prize|Pool)',
+                r'Prize\s*Pool[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
+                r'Total\s*Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
+                r'Prize[:\s]*\$?([\d,]+(?:\.\d+)?)\s*K?\s*(USD|USDC|USDT)?',
+                r'\$\s*([\d,]+(?:\.\d+)?)\s*K?\s*(?:in\s+)?(?:prizes?|pool|USD|bounty|reward)',
+                r'([\d,]+)\s*K?\s*(?:USD|USDC|USDT)\s*(?:Prize|Pool|Bounty|Reward)',
+                r'up\s*to\s*\$?([\d,]+(?:\.\d+)?)\s*K?',  # "up to $X" pattern
+                r'([\d,]+)\s*(?:in\s+)?(?:prizes?|rewards?|bounties?)',  # "X in prizes"
+                r'bounty[:\s]*\$?([\d,]+(?:\.\d+)?)',  # "bounty: $X"
+                r'reward[:\s]*\$?([\d,]+(?:\.\d+)?)',  # "reward: $X"
             ]
             
             for pattern in prize_patterns:
@@ -124,11 +128,32 @@ class DoraHacksDeepScraper:
                     amount_str = match.group(1).replace(',', '')
                     try:
                         prize_amount = float(amount_str)
+                        # Handle "K" suffix (e.g., "50K" = 50000)
+                        if 'k' in match.group(0).lower() and prize_amount < 1000:
+                            prize_amount *= 1000
                         prize_display = f"${prize_amount:,.0f}"
                         logger.debug(f"Extracted prize: {prize_display} from {url}")
                         break
                     except ValueError:
                         continue
+            
+            # If still no prize found, check for crypto amounts
+            if prize_amount == 0:
+                crypto_patterns = [
+                    r'([\d,]+(?:\.\d+)?)\s*(?:ETH|SOL|USDC|USDT|DAI)',
+                    r'([\d,]+(?:\.\d+)?)\s*tokens?',
+                ]
+                for pattern in crypto_patterns:
+                    match = re.search(pattern, content, re.IGNORECASE)
+                    if match:
+                        amount_str = match.group(1).replace(',', '')
+                        try:
+                            crypto_amount = float(amount_str)
+                            if crypto_amount > 0:
+                                prize_display = f"{crypto_amount:,.0f}+ in crypto"
+                                break
+                        except ValueError:
+                            continue
             
             # Strategy 2: Try clicking on "Important Dates" tab and extracting deadline
             deadline = None
