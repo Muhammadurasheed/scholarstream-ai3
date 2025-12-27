@@ -2,13 +2,15 @@
 // Background Service Worker for ScholarStream Co-Pilot
 // Handles Push Notifications via WebSocket with REAL Firebase Auth
 
-const WS_URL = 'ws://localhost:8081/ws/opportunities';
+// API Configuration
+const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__' 
+    ? '__VITE_API_URL__' 
+    : 'http://localhost:8081';
+const WS_URL = API_URL.replace('http', 'ws') + '/ws/opportunities';
+
 let websocket: WebSocket | null = null;
 let reconnectInterval = 1000;
 let currentAuthToken: string | null = null;
-
-// Initialize when extension installs
-chrome.runtime.onInstalled.addListener(() => {
     console.log("ScholarStream Co-Pilot Installed");
     initializeAuth();
 });
