@@ -491,7 +491,7 @@ def get_priority_level(opportunity: Dict, match_score: float) -> str:
 
 
 @router.websocket("/ws/opportunities")
-async def websocket_endpoint(websocket: WebSocket, token: str):
+async def websocket_endpoint(websocket: WebSocket, token: str = ""):
     """
     WebSocket endpoint for real-time opportunity streaming
 
@@ -503,22 +503,51 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         - new_opportunity: Real-time opportunity match
         - heartbeat: Keep-alive ping every 30 seconds
     """
+    # CRITICAL: Accept WebSocket connection FIRST before any validation
+    # This prevents 403 errors during handshake
+    await websocket.accept()
+    
+    # Now verify the token after connection is established
+    if not token:
+        await websocket.send_json({
+            'type': 'error',
+            'message': 'Authentication token required',
+            'code': 'AUTH_REQUIRED'
+        })
+        await websocket.close(code=1008, reason="Authentication token required")
+        return
+    
     user_id = await verify_firebase_token(token)
 
     if not user_id:
+        await websocket.send_json({
+            'type': 'error',
+            'message': 'Invalid authentication token',
+            'code': 'AUTH_FAILED'
+        })
         await websocket.close(code=1008, reason="Invalid authentication token")
         return
 
-    # Dev Bypass: Provide mock profile for test user
-    
     # Production: Always fetch real profile
     user_profile = await get_user_profile(user_id)
 
     if not user_profile:
+        await websocket.send_json({
+            'type': 'error',
+            'message': 'User profile not found. Please complete onboarding.',
+            'code': 'PROFILE_NOT_FOUND'
+        })
         await websocket.close(code=1008, reason="User profile not found")
         return
 
-    await manager.connect(user_id, websocket, user_profile)
+    # Register connection (don't call accept again - already accepted above)
+    manager.active_connections[user_id] = websocket
+    manager.user_profiles[user_id] = user_profile
+    logger.info(
+        "WebSocket connected",
+        user_id=user_id,
+        total_connections=len(manager.active_connections)
+    )
 
     await websocket.send_json({
         'type': 'connection_established',
