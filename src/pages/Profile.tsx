@@ -78,12 +78,27 @@ interface UserProfile {
   state?: string;
   city?: string;
 
-  // Deep Profile / App Builder
+  // Deep Profile / App Builder (Phase 4)
   bio?: string;
   hardSkills?: string[];
   softSkills?: string[];
   projects?: Project[];
   experience?: WorkExperience[];
+  
+  // Essays (Phase 4) - Pre-written snippets for common questions
+  essays?: {
+    personalStatement?: string;
+    whyThisOpportunity?: string;
+    careerGoals?: string;
+    biggestChallenge?: string;
+    teamworkExample?: string;
+  };
+  
+  // Social Links
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  twitterHandle?: string;
 }
 
 interface NotificationPreferences {
@@ -184,19 +199,33 @@ export default function Profile() {
       return;
     }
 
-    let strength = 0;
-    const checks = [
-      { condition: !!profile.firstName && !!profile.lastName, value: 15 },
-      { condition: !!profile.email && !!profile.phone, value: 15 },
-      { condition: !!profile.school && !!profile.major, value: 20 },
-      { condition: !!profile.gpa, value: 10 },
-      { condition: (profile.testScores && Object.keys(profile.testScores).length > 0), value: 10 },
-      { condition: (profile.achievements && profile.achievements.length > 0), value: 10 },
-      { condition: (profile.interests && profile.interests.length >= 3), value: 10 },
-      { condition: documents.length > 0, value: 10 },
-    ];
+    // Enhanced scoring per Phase 4 masterplan
+    const weights = {
+      // Core Identity (25%)
+      name: { condition: !!profile.firstName && !!profile.lastName, value: 10 },
+      contact: { condition: !!profile.email && !!profile.phone, value: 10 },
+      location: { condition: !!profile.country || !!profile.city, value: 5 },
+      
+      // Academic (15%)
+      school: { condition: !!profile.school && !!profile.major, value: 10 },
+      gpa: { condition: !!profile.gpa, value: 5 },
+      
+      // Bio & Skills (20%)
+      bio: { condition: !!profile.bio && profile.bio.length > 50, value: 10 },
+      hardSkills: { condition: (profile.hardSkills?.length || 0) >= 3, value: 5 },
+      softSkills: { condition: (profile.softSkills?.length || 0) >= 2, value: 5 },
+      
+      // Portfolio (25%) - Weighted heavily for hackathons
+      projects: { condition: (profile.projects?.length || 0) >= 1, value: 15 },
+      experience: { condition: (profile.experience?.length || 0) >= 1, value: 10 },
+      
+      // Essays & Extras (15%)
+      essays: { condition: !!profile.essays?.personalStatement, value: 10 },
+      social: { condition: !!profile.linkedinUrl || !!profile.githubUrl, value: 5 },
+    };
 
-    checks.forEach(check => {
+    let strength = 0;
+    Object.values(weights).forEach(check => {
       if (check.condition) strength += check.value;
     });
 
@@ -862,6 +891,118 @@ export default function Profile() {
                       )}
                     </CardContent>
                   </Card>
+
+                  {/* Essays Section (Phase 4) */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Essay Snippets
+                      </CardTitle>
+                      <CardDescription>
+                        Pre-write common essay responses. The AI will adapt these to each application.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Personal Statement / About Me</Label>
+                        <textarea
+                          className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          placeholder="Tell us about yourself, your background, and what drives you..."
+                          value={profile?.essays?.personalStatement || ''}
+                          onChange={(e) => setProfile(prev => prev ? { 
+                            ...prev, 
+                            essays: { ...prev.essays, personalStatement: e.target.value } 
+                          } : null)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Career Goals</Label>
+                        <textarea
+                          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          placeholder="Where do you see yourself in 5-10 years? What impact do you want to make?"
+                          value={profile?.essays?.careerGoals || ''}
+                          onChange={(e) => setProfile(prev => prev ? { 
+                            ...prev, 
+                            essays: { ...prev.essays, careerGoals: e.target.value } 
+                          } : null)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Biggest Challenge Overcome</Label>
+                        <textarea
+                          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          placeholder="Describe a significant challenge you faced and how you overcame it..."
+                          value={profile?.essays?.biggestChallenge || ''}
+                          onChange={(e) => setProfile(prev => prev ? { 
+                            ...prev, 
+                            essays: { ...prev.essays, biggestChallenge: e.target.value } 
+                          } : null)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Teamwork Example</Label>
+                        <textarea
+                          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          placeholder="Describe a time you worked effectively in a team..."
+                          value={profile?.essays?.teamworkExample || ''}
+                          onChange={(e) => setProfile(prev => prev ? { 
+                            ...prev, 
+                            essays: { ...prev.essays, teamworkExample: e.target.value } 
+                          } : null)}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Social Links (Phase 4) */}
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <ExternalLink className="w-5 h-5" />
+                        Social & Portfolio Links
+                      </CardTitle>
+                      <CardDescription>
+                        Add your professional profiles for auto-filling URL fields.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>LinkedIn URL</Label>
+                          <Input
+                            placeholder="https://linkedin.com/in/yourprofile"
+                            value={profile?.linkedinUrl || ''}
+                            onChange={(e) => setProfile(prev => prev ? { ...prev, linkedinUrl: e.target.value } : null)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>GitHub URL</Label>
+                          <Input
+                            placeholder="https://github.com/yourusername"
+                            value={profile?.githubUrl || ''}
+                            onChange={(e) => setProfile(prev => prev ? { ...prev, githubUrl: e.target.value } : null)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Portfolio Website</Label>
+                          <Input
+                            placeholder="https://yourportfolio.com"
+                            value={profile?.portfolioUrl || ''}
+                            onChange={(e) => setProfile(prev => prev ? { ...prev, portfolioUrl: e.target.value } : null)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Twitter/X Handle</Label>
+                          <Input
+                            placeholder="@yourusername"
+                            value={profile?.twitterHandle || ''}
+                            onChange={(e) => setProfile(prev => prev ? { ...prev, twitterHandle: e.target.value } : null)}
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
                 <div className="flex justify-end">
                   <Button onClick={saveProfile} disabled={saving} size="lg" className="w-full md:w-auto">
@@ -1159,10 +1300,12 @@ export default function Profile() {
                   </div>
                   <h4 className="text-lg font-semibold mb-2">To improve your score:</h4>
                   <ul className="space-y-1 text-sm text-muted-foreground">
-                    {!profile?.testScores && <li>• Add test scores (+10%)</li>}
-                    {!profile?.achievements?.length && <li>• Add achievements (+10%)</li>}
-                    {documents.length === 0 && <li>• Upload documents (+10%)</li>}
-                    {!profile?.phone && <li>• Add phone number (+5%)</li>}
+                    {(!profile?.bio || profile.bio.length < 50) && <li>• Add a bio (+10%)</li>}
+                    {(!profile?.projects || profile.projects.length === 0) && <li>• Add a project (+15%)</li>}
+                    {(!profile?.experience || profile.experience.length === 0) && <li>• Add experience (+10%)</li>}
+                    {(!profile?.hardSkills || profile.hardSkills.length < 3) && <li>• Add 3+ hard skills (+5%)</li>}
+                    {!profile?.essays?.personalStatement && <li>• Write personal statement (+10%)</li>}
+                    {(!profile?.linkedinUrl && !profile?.githubUrl) && <li>• Add social links (+5%)</li>}
                   </ul>
                 </div>
               </CardContent>
