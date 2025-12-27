@@ -491,7 +491,8 @@ class FocusEngine {
 
         setTimeout(() => {
             document.getElementById('ss-guidance-upload')?.addEventListener('click', () => {
-                chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
+                // Use safe sender to avoid unhandled promise rejections when the service worker is sleeping/reloading.
+                void safeSendMessage({ type: 'OPEN_SIDE_PANEL' });
                 this.hideGuidanceBubble();
             });
             document.getElementById('ss-guidance-profile')?.addEventListener('click', () => {
