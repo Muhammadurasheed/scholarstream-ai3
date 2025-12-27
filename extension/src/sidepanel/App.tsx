@@ -1,13 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle } from 'lucide-react';
+import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
+import { ENDPOINTS, detectPlatform, calculateProfileCompleteness } from '../config';
 
 interface Message {
     id: string;
     role: 'user' | 'assistant';
     text: string;
+}
+
+interface ContextStatus {
+    profileCompleteness: number;
+    hasDocument: boolean;
+    documentName: string | null;
+    platform: string;
+    pageUrl: string;
 }
 
 export default function App() {
@@ -18,12 +27,27 @@ export default function App() {
     const [loading, setLoading] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [projectContext, setProjectContext] = useState<string | null>(null);
+    const [projectFileName, setProjectFileName] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Auth State
     const [authToken, setAuthToken] = useState<string | null>(null);
+    const [userProfile, setUserProfile] = useState<any>(null);
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [authError, setAuthError] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+
+    // Context Status
+    const [contextStatus, setContextStatus] = useState<ContextStatus>({
+        profileCompleteness: 0,
+        hasDocument: false,
+        documentName: null,
+        platform: 'Unknown',
+        pageUrl: '',
+    });
+    const [showContextPanel, setShowContextPanel] = useState(true);
     const [password, setPassword] = useState('');
     const [authError, setAuthError] = useState('');
     const [authLoading, setAuthLoading] = useState(false);
@@ -34,22 +58,72 @@ export default function App() {
 
     useEffect(scrollToBottom, [messages]);
 
-    // Check for existing token on mount
+    // Check for existing token and profile on mount
     useEffect(() => {
-        chrome.storage.local.get(['authToken'], (result) => {
+        chrome.storage.local.get(['authToken', 'userProfile', 'projectContext', 'projectFileName'], (result) => {
             if (result.authToken) {
                 setAuthToken(result.authToken);
             }
+            if (result.userProfile) {
+                setUserProfile(result.userProfile);
+                setContextStatus(prev => ({
+                    ...prev,
+                    profileCompleteness: calculateProfileCompleteness(result.userProfile)
+                }));
+            }
+            if (result.projectContext) {
+                setProjectContext(result.projectContext);
+                setProjectFileName(result.projectFileName || 'document.txt');
+                setContextStatus(prev => ({
+                    ...prev,
+                    hasDocument: true,
+                    documentName: result.projectFileName || 'document.txt'
+                }));
+            }
         });
 
-        // Listen for token changes (from sync or other sources)
+        // Listen for storage changes
         const listener = (changes: any, area: string) => {
-            if (area === 'local' && changes.authToken) {
-                setAuthToken(changes.authToken.newValue);
+            if (area === 'local') {
+                if (changes.authToken) {
+                    setAuthToken(changes.authToken.newValue);
+                }
+                if (changes.userProfile) {
+                    setUserProfile(changes.userProfile.newValue);
+                    setContextStatus(prev => ({
+                        ...prev,
+                        profileCompleteness: calculateProfileCompleteness(changes.userProfile.newValue)
+                    }));
+                }
             }
         };
         chrome.storage.onChanged.addListener(listener);
         return () => chrome.storage.onChanged.removeListener(listener);
+    }, []);
+
+    // Detect platform when tab changes
+    useEffect(() => {
+        const updatePlatform = async () => {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab?.url) {
+                    setContextStatus(prev => ({
+                        ...prev,
+                        platform: detectPlatform(tab.url || ''),
+                        pageUrl: tab.url || ''
+                    }));
+                }
+            } catch (e) {
+                console.warn("Could not detect platform:", e);
+            }
+        };
+        updatePlatform();
+        
+        // Listen for tab changes
+        chrome.tabs.onActivated?.addListener(updatePlatform);
+        chrome.tabs.onUpdated?.addListener((_, changeInfo) => {
+            if (changeInfo.url) updatePlatform();
+        });
     }, []);
 
     // Handle Login Logic
@@ -73,6 +147,11 @@ export default function App() {
                 if (userDoc.exists()) {
                     const profileData = userDoc.data();
                     await chrome.storage.local.set({ userProfile: profileData });
+                    setUserProfile(profileData);
+                    setContextStatus(prev => ({
+                        ...prev,
+                        profileCompleteness: calculateProfileCompleteness(profileData)
+                    }));
                     console.log("[EXT] Profile Synced:", profileData);
                 }
             } catch (profileErr) {
@@ -133,9 +212,20 @@ export default function App() {
         reader.onload = async (e) => {
             const text = e.target?.result as string;
             setProjectContext(text);
+            setProjectFileName(file.name);
 
             // Persist Context
-            chrome.storage.local.set({ projectContext: text });
+            chrome.storage.local.set({ 
+                projectContext: text,
+                projectFileName: file.name 
+            });
+
+            // Update context status
+            setContextStatus(prev => ({
+                ...prev,
+                hasDocument: true,
+                documentName: file.name
+            }));
 
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -144,6 +234,23 @@ export default function App() {
             }]);
         };
         reader.readAsText(file);
+    };
+
+    // Clear document context
+    const clearDocument = () => {
+        setProjectContext(null);
+        setProjectFileName(null);
+        chrome.storage.local.remove(['projectContext', 'projectFileName']);
+        setContextStatus(prev => ({
+            ...prev,
+            hasDocument: false,
+            documentName: null
+        }));
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'assistant',
+            text: '📄 Document context cleared.'
+        }]);
     };
 
     const handleSend = async () => {
@@ -172,11 +279,11 @@ export default function App() {
             }
 
             // 2. Call Backend API
-            const response = await fetch('http://localhost:8081/api/extension/chat', {
+            const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken || 'TEST_TOKEN'}`
+                    'Authorization': `Bearer ${authToken}`
                 },
                 body: JSON.stringify({
                     query: userMsg.text,
@@ -217,7 +324,7 @@ export default function App() {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 role: 'assistant',
-                text: "Sorry, I couldn't reach the server. Is the backend running at localhost:8081?"
+                text: "Sorry, I couldn't reach the server. Please check your connection."
             }]);
         } finally {
             setLoading(false);
@@ -326,7 +433,7 @@ export default function App() {
     return (
         <div className="flex flex-col h-screen bg-slate-900 text-slate-100">
             {/* Header with Logout option implicitly or minimal header */}
-            <header className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+            <header className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950">
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-blue-500" />
                     <h1 className="font-bold text-lg">Co-Pilot</h1>
@@ -336,6 +443,7 @@ export default function App() {
                         onClick={() => {
                             chrome.storage.local.remove(['authToken', 'userProfile']);
                             setAuthToken(null);
+                            setUserProfile(null);
                         }}
                         className="text-xs text-slate-500 hover:text-slate-300"
                         title="Sign Out"
@@ -351,6 +459,111 @@ export default function App() {
                     </button>
                 </div>
             </header>
+
+            {/* Context Status Panel */}
+            {showContextPanel && (
+                <div className="p-3 bg-slate-950/50 border-b border-slate-800">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-400">📄 Active Context</span>
+                        <button 
+                            onClick={() => setShowContextPanel(false)}
+                            className="text-slate-500 hover:text-slate-300 p-0.5"
+                        >
+                            <X className="w-3 h-3" />
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {/* Profile Status */}
+                        <div className="flex items-center gap-2">
+                            {contextStatus.profileCompleteness >= 70 ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            ) : contextStatus.profileCompleteness >= 40 ? (
+                                <Circle className="w-4 h-4 text-yellow-400" />
+                            ) : (
+                                <Circle className="w-4 h-4 text-slate-500" />
+                            )}
+                            <span className="text-xs text-slate-300 flex-1">Profile</span>
+                            <span className={`text-xs font-medium ${
+                                contextStatus.profileCompleteness >= 70 ? 'text-green-400' : 
+                                contextStatus.profileCompleteness >= 40 ? 'text-yellow-400' : 'text-slate-500'
+                            }`}>
+                                {contextStatus.profileCompleteness}%
+                            </span>
+                        </div>
+                        
+                        {/* Document Status */}
+                        <div className="flex items-center gap-2">
+                            {contextStatus.hasDocument ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            ) : (
+                                <Circle className="w-4 h-4 text-slate-500" />
+                            )}
+                            <span className="text-xs text-slate-300 flex-1">
+                                {contextStatus.hasDocument ? contextStatus.documentName : 'No document'}
+                            </span>
+                            {contextStatus.hasDocument && (
+                                <button 
+                                    onClick={clearDocument}
+                                    className="text-slate-500 hover:text-red-400 p-0.5"
+                                    title="Remove document"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            )}
+                        </div>
+                        
+                        {/* Platform */}
+                        <div className="flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-blue-400" />
+                            <span className="text-xs text-slate-300 flex-1">Platform</span>
+                            <span className="text-xs font-medium text-blue-400">{contextStatus.platform}</span>
+                        </div>
+                    </div>
+                    
+                    {/* Quick Actions */}
+                    <div className="flex gap-2 mt-3">
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded border border-slate-700 flex items-center justify-center gap-1"
+                        >
+                            <Upload className="w-3 h-3" />
+                            {contextStatus.hasDocument ? 'Replace Doc' : 'Upload Doc'}
+                        </button>
+                        <button
+                            onClick={() => window.open('https://scholarstream.lovable.app/profile', '_blank')}
+                            className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded border border-slate-700 flex items-center justify-center gap-1"
+                        >
+                            <User className="w-3 h-3" />
+                            View Profile
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Collapsed Context Indicator */}
+            {!showContextPanel && (
+                <button 
+                    onClick={() => setShowContextPanel(true)}
+                    className="px-3 py-1.5 bg-slate-950/50 border-b border-slate-800 flex items-center gap-2 hover:bg-slate-800/50 transition-colors"
+                >
+                    <div className="flex items-center gap-1">
+                        {contextStatus.profileCompleteness >= 70 ? (
+                            <span className="w-2 h-2 rounded-full bg-green-400" />
+                        ) : (
+                            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                        )}
+                        {contextStatus.hasDocument ? (
+                            <span className="w-2 h-2 rounded-full bg-green-400" />
+                        ) : (
+                            <span className="w-2 h-2 rounded-full bg-slate-500" />
+                        )}
+                    </div>
+                    <span className="text-xs text-slate-400">
+                        {contextStatus.platform} • {contextStatus.profileCompleteness}% profile
+                        {contextStatus.hasDocument && ' • Doc loaded'}
+                    </span>
+                </button>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -374,15 +587,6 @@ export default function App() {
                         )}
                     </div>
                 ))}
-
-                {/* File Context Indicator */}
-                {projectContext && (
-                    <div className="flex justify-center">
-                        <div className="bg-slate-800 text-xs text-slate-400 px-3 py-1 rounded-full flex items-center gap-1 border border-slate-700">
-                            <FileText className="w-3 h-3" /> Project Context Active
-                        </div>
-                    </div>
-                )}
 
                 {loading && (
                     <div className="flex gap-3">
