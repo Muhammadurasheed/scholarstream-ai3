@@ -123,15 +123,36 @@ class CortexFlinkProcessor:
         now = time.time()
         
         # 1. DEDUPLICATION LOGIC (Permanent Content-based)
+        # V4 FIX: Allow "better" updates to pass through (deep scrapes / enriched fields)
+        # so low-quality first writes don't permanently block later improvements.
         if content_id in self.seen_opportunities:
-            self.duplicates_dropped += 1
-            logger.debug(
-                "Duplicate Dropped (Cortex Shield)", 
+            is_deep_source = any(
+                s in str(event.get('source', '')).lower()
+                for s in ['deep', 'dorahacks_deep', 'refinery', 'enriched']
+            )
+            has_new_signal = bool(event.get('amount') or event.get('deadline') or event.get('amount_display'))
+
+            if not (is_deep_source or has_new_signal):
+                self.duplicates_dropped += 1
+                logger.debug(
+                    "Duplicate Dropped (Cortex Shield)",
+                    content_id=content_id[:8],
+                    url=url[:50] if url else 'N/A',
+                    total_dropped=self.duplicates_dropped,
+                )
+                return None  # Drop duplicate
+
+            # Let it pass as an update event.
+            event['is_update'] = True
+            event['id'] = content_id
+            event['cortex_processed_at'] = now
+            logger.info(
+                "Duplicate Allowed (Update)",
                 content_id=content_id[:8],
                 url=url[:50] if url else 'N/A',
-                total_dropped=self.duplicates_dropped
+                source=event.get('source'),
             )
-            return None  # Drop duplicate
+            return event
             
         # Update state with stable ID
         self.seen_opportunities[content_id] = now
