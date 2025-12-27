@@ -226,11 +226,16 @@ export const OpportunityCard = ({
       )}
       onClick={() => navigate(`/opportunity/${scholarship.id}`)}
     >
-      {/* NEW BANNER - Absolute Positioned */}
+      {/* NEW BANNER - Animated & Prominent */}
       {isNew && (
-        <div className="absolute top-0 right-0 z-10">
-          <div className="bg-gradient-to-l from-primary to-primary/80 text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm">
-            NEW
+        <div className="absolute -top-1 -right-1 z-20">
+          <div className="relative">
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-primary rounded-full blur-md opacity-50 animate-pulse" />
+            {/* Badge */}
+            <div className="relative bg-gradient-to-r from-primary via-primary to-primary/90 text-primary-foreground text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-primary-foreground/20 animate-bounce">
+              ✨ NEW
+            </div>
           </div>
         </div>
       )}

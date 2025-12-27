@@ -25,7 +25,7 @@ export const FinancialImpactWidget = ({ stats }: FinancialImpactWidgetProps) => 
         Financial Impact
       </h3>
 
-      <div className="mb-6">
+      <div className="mb-6 relative">
         <ResponsiveContainer width="100%" height={200}>
           <PieChart>
             <Pie
@@ -51,9 +51,16 @@ export const FinancialImpactWidget = ({ stats }: FinancialImpactWidgetProps) => 
             />
           </PieChart>
         </ResponsiveContainer>
-        <div className="text-center -mt-32 mb-24 pointer-events-none">
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(stats.total_value)}</div>
-          <div className="text-xs text-muted-foreground">Total Value</div>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <div className="text-lg sm:text-xl md:text-2xl font-bold text-foreground whitespace-nowrap">
+              {stats.total_value >= 1000000 
+                ? `$${(stats.total_value / 1000000).toFixed(1)}M`
+                : formatCurrency(stats.total_value)
+              }
+            </div>
+            <div className="text-xs text-muted-foreground">Total Value</div>
+          </div>
         </div>
       </div>
 
