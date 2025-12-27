@@ -549,12 +549,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
         total_connections=len(manager.active_connections)
     )
 
-    await websocket.send_json({
-        'type': 'connection_established',
-        'message': 'Connected to real-time opportunity stream',
-        'user_id': user_id,
-        'timestamp': datetime.utcnow().isoformat()
-    })
+    # Client may disconnect immediately after handshake; don't crash the server.
+    try:
+        await websocket.send_json({
+            'type': 'connection_established',
+            'message': 'Connected to real-time opportunity stream',
+            'user_id': user_id,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+        logger.info("Client disconnected before init message", user_id=user_id)
+        return
 
     try:
         while True:
@@ -565,10 +571,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
                 message_type = message.get('type')
 
                 if message_type == 'ping':
-                    await websocket.send_json({
-                        'type': 'pong',
-                        'timestamp': datetime.utcnow().isoformat()
-                    })
+                    try:
+                        await websocket.send_json({
+                            'type': 'pong',
+                            'timestamp': datetime.utcnow().isoformat()
+                        })
+                    except WebSocketDisconnect:
+                        break
 
                 elif message_type == 'update_profile':
                     updated_profile = message.get('profile', {})
@@ -576,21 +585,32 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
                         manager.user_profiles[user_id] = updated_profile
                         logger.info("User profile updated in WebSocket", user_id=user_id)
                     else:
-                        logger.warning("Invalid profile update format", user_id=user_id, received_type=type(updated_profile).__name__)
+                        logger.warning(
+                            "Invalid profile update format",
+                            user_id=user_id,
+                            received_type=type(updated_profile).__name__
+                        )
 
             except asyncio.TimeoutError:
-                await websocket.send_json({
-                    'type': 'heartbeat',
-                    'timestamp': datetime.utcnow().isoformat()
-                })
+                # Heartbeats are best-effort; if client is gone, just exit.
+                try:
+                    await websocket.send_json({
+                        'type': 'heartbeat',
+                        'timestamp': datetime.utcnow().isoformat()
+                    })
+                except WebSocketDisconnect:
+                    break
 
-    except WebSocketDisconnect:
-        manager.disconnect(user_id)
-        logger.info("Client disconnected", user_id=user_id)
+            except WebSocketDisconnect:
+                break
 
     except Exception as e:
         logger.error("WebSocket error", user_id=user_id, error=str(e))
+
+    finally:
         manager.disconnect(user_id)
+        logger.info("WebSocket cleaned up", user_id=user_id)
+
 
 
 async def start_kafka_consumer_task():
