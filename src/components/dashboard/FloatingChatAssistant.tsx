@@ -354,55 +354,51 @@ export const FloatingChatAssistant = () => {
                   </ReactMarkdown>
                 </div>
 
-                {/* Opportunity Cards */}
+                {/* Opportunity Cards - Show ALL opportunities */}
                 {message.opportunities && message.opportunities.length > 0 && (
                   <div className="mt-3 space-y-2">
-                    {message.opportunities.slice(0, 3).map((opp) => (
-                      <Card key={opp.id} className="p-3 bg-background">
-                        <div className="flex items-start justify-between gap-2">
+                    {message.opportunities.map((opp) => (
+                      <Card key={opp.id} className="p-3 bg-background border border-border/50 hover:border-primary/30 transition-colors">
+                        <div className="flex items-start gap-3">
+                          {/* Match Score Badge - Left side */}
+                          <div className="flex-shrink-0 flex flex-col items-center gap-1">
+                            <div className="h-1.5 w-10 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-primary rounded-full transition-all" 
+                                style={{ width: `${opp.match_score || 50}%` }}
+                              />
+                            </div>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-semibold">
+                              {opp.match_score || 50}% Match
+                            </Badge>
+                          </div>
+                          
+                          {/* Content */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="secondary" className="text-xs">
-                                {opp.source_type}
-                              </Badge>
-                              {opp.priority_level === 'urgent' && (
-                                <Badge variant="destructive" className="text-xs">
-                                  Urgent
-                                </Badge>
-                              )}
-                              {opp.match_score && (
-                                <Badge variant="outline" className="text-xs">
-                                  {opp.match_score}% Match
-                                </Badge>
-                              )}
-                            </div>
-                            <h4 className="font-semibold text-sm truncate">{opp.name}</h4>
+                            <h4 className="font-semibold text-sm line-clamp-1">{opp.name}</h4>
                             <p className="text-xs text-muted-foreground">{opp.organization}</p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className="text-xs font-semibold text-success">
-                                {stripHtml(opp.amount_display || '')}
-                              </span>
-                              {opp.deadline && (
-                                <span className="text-xs text-muted-foreground">
-                                  Due: {new Date(opp.deadline).toLocaleDateString()}
-                                </span>
-                              )}
-                            </div>
+                            <p className="text-sm font-semibold text-emerald-500 mt-1">
+                              {opp.amount_display && opp.amount_display !== '$0' && opp.amount_display !== 'See details' 
+                                ? stripHtml(opp.amount_display) 
+                                : 'See Details'}
+                            </p>
                           </div>
                         </div>
+                        
+                        {/* Action Buttons */}
                         <div className="flex gap-2 mt-2">
                           <Button
                             size="sm"
                             variant="outline"
-                            className="flex-1 h-7 text-xs"
+                            className="flex-1 h-8 text-xs gap-1"
                             onClick={() => navigate(`/opportunity/${opp.id}`)}
                           >
-                            <ExternalLink className="h-3 w-3 mr-1" />
+                            <ExternalLink className="h-3 w-3" />
                             View
                           </Button>
                           <Button
                             size="sm"
-                            className="flex-1 h-7 text-xs"
+                            className="flex-1 h-8 text-xs bg-primary hover:bg-primary/90"
                             onClick={() =>
                               opp.source_url
                                 ? window.open(normalizeApplyUrl(opp.source_url), '_blank', 'noopener,noreferrer')
@@ -414,6 +410,13 @@ export const FloatingChatAssistant = () => {
                         </div>
                       </Card>
                     ))}
+                    
+                    {/* Show count if many */}
+                    {message.opportunities.length > 6 && (
+                      <p className="text-xs text-center text-muted-foreground pt-1">
+                        Showing all {message.opportunities.length} matches
+                      </p>
+                    )}
                   </div>
                 )}
 
