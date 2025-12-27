@@ -13,7 +13,7 @@ import logging
 import asyncio
 
 from app.config import settings
-from app.routes import scholarships, applications, chat, websocket, extension
+from app.routes import scholarships, applications, chat, websocket, extension, documents
 
 # Configure structured logging with readable format for development
 log_renderer = (
@@ -146,6 +146,7 @@ app.include_router(applications.router)
 app.include_router(chat.router)
 app.include_router(websocket.router)
 app.include_router(extension.router)
+app.include_router(documents.router)
 from app.routes import crawler
 app.include_router(crawler.router)
 

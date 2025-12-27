@@ -12,6 +12,8 @@ export const ENDPOINTS = {
   mapFields: `${API_URL}/api/extension/map-fields`,
   userProfile: `${API_URL}/api/extension/user-profile`,
   saveApplicationData: `${API_URL}/api/extension/save-application-data`,
+  parseDocument: `${API_URL}/api/documents/parse`,
+  supportedTypes: `${API_URL}/api/documents/supported-types`,
 };
 
 // WebSocket URL (derived from API URL)
@@ -85,4 +87,89 @@ export function calculateProfileCompleteness(profile: any): number {
   if (profile.experience?.length > 0) score += weights.experience;
   
   return Math.min(100, score);
+}
+
+// ========== DOCUMENT CONTEXT TYPES ==========
+
+/**
+ * Uploaded document context interface
+ */
+export interface UploadedDocument {
+  id: string;
+  filename: string;
+  content: string;
+  uploadedAt: number; // timestamp
+  charCount: number;
+  fileType: string;
+  platformHint?: string;
+}
+
+/**
+ * Context status for sidebar display
+ */
+export interface ContextStatus {
+  profileCompleteness: number;
+  hasDocument: boolean;
+  documentName: string | null;
+  documentCharCount: number;
+  platform: string;
+  pageUrl: string;
+  isProcessing: boolean;
+  processingError: string | null;
+}
+
+/**
+ * Parse a document via backend API
+ * Supports PDF, DOCX, TXT, MD, JSON
+ */
+export async function parseDocument(
+  file: File, 
+  authToken: string
+): Promise<{ 
+  success: boolean; 
+  content: string; 
+  charCount: number; 
+  fileType: string; 
+  error?: string 
+}> {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const response = await fetch(ENDPOINTS.parseDocument, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Server error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      content: data.content,
+      charCount: data.char_count,
+      fileType: data.file_type,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      content: '',
+      charCount: 0,
+      fileType: 'unknown',
+      error: error instanceof Error ? error.message : 'Failed to parse document',
+    };
+  }
+}
+
+/**
+ * Generate a unique document ID
+ */
+export function generateDocumentId(): string {
+  return `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }

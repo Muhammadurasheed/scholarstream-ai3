@@ -1,22 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X } from 'lucide-react';
+import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
-import { ENDPOINTS, detectPlatform, calculateProfileCompleteness } from '../config';
+import { ENDPOINTS, detectPlatform, calculateProfileCompleteness, parseDocument, generateDocumentId, type ContextStatus, type UploadedDocument } from '../config';
 
 interface Message {
     id: string;
     role: 'user' | 'assistant';
     text: string;
-}
-
-interface ContextStatus {
-    profileCompleteness: number;
-    hasDocument: boolean;
-    documentName: string | null;
-    platform: string;
-    pageUrl: string;
 }
 
 export default function App() {
@@ -39,18 +31,19 @@ export default function App() {
     const [authError, setAuthError] = useState('');
     const [authLoading, setAuthLoading] = useState(false);
 
-    // Context Status
+    // Context Status (Enhanced for Phase 2)
     const [contextStatus, setContextStatus] = useState<ContextStatus>({
         profileCompleteness: 0,
         hasDocument: false,
         documentName: null,
+        documentCharCount: 0,
         platform: 'Unknown',
         pageUrl: '',
+        isProcessing: false,
+        processingError: null,
     });
     const [showContextPanel, setShowContextPanel] = useState(true);
-    const [password, setPassword] = useState('');
-    const [authError, setAuthError] = useState('');
-    const [authLoading, setAuthLoading] = useState(false);
+    const [isSyncingProfile, setIsSyncingProfile] = useState(false);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -60,7 +53,7 @@ export default function App() {
 
     // Check for existing token and profile on mount
     useEffect(() => {
-        chrome.storage.local.get(['authToken', 'userProfile', 'projectContext', 'projectFileName'], (result) => {
+        chrome.storage.local.get(['authToken', 'userProfile', 'projectContext', 'projectFileName', 'documentMeta'], (result) => {
             if (result.authToken) {
                 setAuthToken(result.authToken);
             }
@@ -74,10 +67,12 @@ export default function App() {
             if (result.projectContext) {
                 setProjectContext(result.projectContext);
                 setProjectFileName(result.projectFileName || 'document.txt');
+                const meta = result.documentMeta || {};
                 setContextStatus(prev => ({
                     ...prev,
                     hasDocument: true,
-                    documentName: result.projectFileName || 'document.txt'
+                    documentName: result.projectFileName || 'document.txt',
+                    documentCharCount: meta.charCount || result.projectContext.length,
                 }));
             }
         });
@@ -126,6 +121,37 @@ export default function App() {
         });
     }, []);
 
+    // Sync profile from Firebase
+    const syncProfile = async () => {
+        if (!authToken) return;
+        setIsSyncingProfile(true);
+        
+        try {
+            const user = auth.currentUser;
+            if (user) {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    const profileData = userDoc.data();
+                    await chrome.storage.local.set({ userProfile: profileData });
+                    setUserProfile(profileData);
+                    setContextStatus(prev => ({
+                        ...prev,
+                        profileCompleteness: calculateProfileCompleteness(profileData)
+                    }));
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'assistant',
+                        text: `✅ Profile synced! Completeness: ${calculateProfileCompleteness(profileData)}%`
+                    }]);
+                }
+            }
+        } catch (error) {
+            console.error("Profile sync failed:", error);
+        } finally {
+            setIsSyncingProfile(false);
+        }
+    };
+
     // Handle Login Logic
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -156,7 +182,6 @@ export default function App() {
                 }
             } catch (profileErr) {
                 console.error("[EXT] Failed to sync profile:", profileErr);
-                // Non-fatal, but good to know
             }
 
         } catch (error: any) {
@@ -170,7 +195,6 @@ export default function App() {
     // Voice Handler (Web Speech API)
     const toggleVoice = () => {
         if (isListening) {
-            // Stop logic handled by onend
             return;
         }
 
@@ -201,50 +225,147 @@ export default function App() {
         recognition.start();
     };
 
-    // File Upload Handler
+    // Enhanced File Upload Handler with Backend Parsing
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Simple text reading for MVP (Supports .md, .txt, .json)
-        // For PDF/Docx, we would send to backend for parsing, but let's do text for now as "Project Context"
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const text = e.target?.result as string;
-            setProjectContext(text);
-            setProjectFileName(file.name);
+        // Update UI to show processing
+        setContextStatus(prev => ({
+            ...prev,
+            isProcessing: true,
+            processingError: null,
+        }));
 
-            // Persist Context
-            chrome.storage.local.set({ 
-                projectContext: text,
-                projectFileName: file.name 
-            });
+        // Check file type for smart parsing
+        const filename = file.name.toLowerCase();
+        const needsBackendParsing = filename.endsWith('.pdf') || filename.endsWith('.docx');
 
-            // Update context status
-            setContextStatus(prev => ({
-                ...prev,
-                hasDocument: true,
-                documentName: file.name
-            }));
-
+        if (needsBackendParsing && authToken) {
+            // Use backend for PDF/DOCX parsing
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 role: 'assistant',
-                text: `✅ I've read "${file.name}". I'll use this context for your answers.`
+                text: `📄 Processing "${file.name}"... Extracting text content.`
             }]);
-        };
-        reader.readAsText(file);
+
+            const result = await parseDocument(file, authToken);
+
+            if (result.success) {
+                setProjectContext(result.content);
+                setProjectFileName(file.name);
+
+                const documentMeta: UploadedDocument = {
+                    id: generateDocumentId(),
+                    filename: file.name,
+                    content: result.content,
+                    uploadedAt: Date.now(),
+                    charCount: result.charCount,
+                    fileType: result.fileType,
+                    platformHint: contextStatus.platform,
+                };
+
+                // Persist Context
+                await chrome.storage.local.set({ 
+                    projectContext: result.content,
+                    projectFileName: file.name,
+                    documentMeta,
+                });
+
+                setContextStatus(prev => ({
+                    ...prev,
+                    hasDocument: true,
+                    documentName: file.name,
+                    documentCharCount: result.charCount,
+                    isProcessing: false,
+                    processingError: null,
+                }));
+
+                setMessages(prev => [...prev, {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    text: `✅ Successfully extracted ${result.charCount.toLocaleString()} characters from "${file.name}". I'll use this context to help with your application!`
+                }]);
+            } else {
+                setContextStatus(prev => ({
+                    ...prev,
+                    isProcessing: false,
+                    processingError: result.error || 'Failed to parse document',
+                }));
+
+                setMessages(prev => [...prev, {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    text: `❌ Failed to parse "${file.name}": ${result.error}. Try a different format (TXT, MD, or ensure the PDF isn't password protected).`
+                }]);
+            }
+        } else {
+            // Simple text reading for TXT/MD/JSON
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const text = e.target?.result as string;
+                setProjectContext(text);
+                setProjectFileName(file.name);
+
+                const documentMeta: UploadedDocument = {
+                    id: generateDocumentId(),
+                    filename: file.name,
+                    content: text,
+                    uploadedAt: Date.now(),
+                    charCount: text.length,
+                    fileType: 'text',
+                    platformHint: contextStatus.platform,
+                };
+
+                // Persist Context
+                await chrome.storage.local.set({ 
+                    projectContext: text,
+                    projectFileName: file.name,
+                    documentMeta,
+                });
+
+                setContextStatus(prev => ({
+                    ...prev,
+                    hasDocument: true,
+                    documentName: file.name,
+                    documentCharCount: text.length,
+                    isProcessing: false,
+                    processingError: null,
+                }));
+
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    text: `✅ Loaded "${file.name}" (${text.length.toLocaleString()} chars). I'll use this context for your answers.`
+                }]);
+            };
+            reader.onerror = () => {
+                setContextStatus(prev => ({
+                    ...prev,
+                    isProcessing: false,
+                    processingError: 'Failed to read file',
+                }));
+            };
+            reader.readAsText(file);
+        }
+
+        // Reset file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
     };
 
     // Clear document context
     const clearDocument = () => {
         setProjectContext(null);
         setProjectFileName(null);
-        chrome.storage.local.remove(['projectContext', 'projectFileName']);
+        chrome.storage.local.remove(['projectContext', 'projectFileName', 'documentMeta']);
         setContextStatus(prev => ({
             ...prev,
             hasDocument: false,
-            documentName: null
+            documentName: null,
+            documentCharCount: 0,
+            processingError: null,
         }));
         setMessages(prev => [...prev, {
             id: Date.now().toString(),
@@ -263,19 +384,15 @@ export default function App() {
 
         try {
             // 1. Get Page Context from Content Script
-            // We use a safe fallback if context extraction fails
             let context = { title: 'Unknown', url: '', content: '', forms: [] };
 
             try {
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (tab?.id) {
-                    // Set a timeout for the context request
-                    // Using a promise wrapper for timeout handling if needed, but chrome.tabs.sendMessage usually fails fast if no listener
                     context = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT' });
                 }
             } catch (e) {
                 console.warn("Could not get page context:", e);
-                // Non-fatal, we continue with empty context
             }
 
             // 2. Call Backend API
@@ -288,7 +405,7 @@ export default function App() {
                 body: JSON.stringify({
                     query: userMsg.text,
                     page_context: context,
-                    project_context: projectContext // Send uploaded context
+                    project_context: projectContext
                 })
             });
 
@@ -298,7 +415,7 @@ export default function App() {
             }
 
             const data = await response.json();
-            const aiResponse = data.data; // { message, action }
+            const aiResponse = data.data;
 
             const aiMsg: Message = {
                 id: (Date.now() + 1).toString(),
@@ -338,10 +455,9 @@ export default function App() {
             if (tab?.id) {
                 const response = await chrome.tabs.sendMessage(tab.id, {
                     type: 'AUTO_FILL_REQUEST',
-                    projectContext: projectContext || undefined // Send the uploaded document content
+                    projectContext: projectContext || undefined
                 });
 
-                // Add system message about result
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: 'assistant',
@@ -359,6 +475,14 @@ export default function App() {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Get context status color
+    const getContextStatusColor = () => {
+        const { profileCompleteness, hasDocument } = contextStatus;
+        if (profileCompleteness >= 70 && hasDocument) return 'bg-green-500';
+        if (profileCompleteness >= 40 || hasDocument) return 'bg-yellow-500';
+        return 'bg-red-500';
     };
 
     // --- LOGIN SCREEN ---
@@ -429,12 +553,13 @@ export default function App() {
         );
     }
 
-    // --- MAIN APP (Showing only when authenticated) ---
+    // --- MAIN APP (Authenticated) ---
     return (
         <div className="flex flex-col h-screen bg-slate-900 text-slate-100">
-            {/* Header with Logout option implicitly or minimal header */}
+            {/* Header */}
             <header className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950">
                 <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${getContextStatusColor()} animate-pulse`} />
                     <Sparkles className="w-5 h-5 text-blue-500" />
                     <h1 className="font-bold text-lg">Co-Pilot</h1>
                 </div>
@@ -489,28 +614,54 @@ export default function App() {
                             }`}>
                                 {contextStatus.profileCompleteness}%
                             </span>
+                            <button
+                                onClick={syncProfile}
+                                disabled={isSyncingProfile}
+                                className="text-slate-500 hover:text-blue-400 p-0.5"
+                                title="Sync Profile"
+                            >
+                                <RefreshCw className={`w-3 h-3 ${isSyncingProfile ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
                         
                         {/* Document Status */}
                         <div className="flex items-center gap-2">
-                            {contextStatus.hasDocument ? (
+                            {contextStatus.isProcessing ? (
+                                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                            ) : contextStatus.hasDocument ? (
                                 <CheckCircle2 className="w-4 h-4 text-green-400" />
                             ) : (
                                 <Circle className="w-4 h-4 text-slate-500" />
                             )}
-                            <span className="text-xs text-slate-300 flex-1">
-                                {contextStatus.hasDocument ? contextStatus.documentName : 'No document'}
+                            <span className="text-xs text-slate-300 flex-1 truncate">
+                                {contextStatus.isProcessing 
+                                    ? 'Processing...' 
+                                    : contextStatus.hasDocument 
+                                        ? contextStatus.documentName 
+                                        : 'No document'}
                             </span>
                             {contextStatus.hasDocument && (
-                                <button 
-                                    onClick={clearDocument}
-                                    className="text-slate-500 hover:text-red-400 p-0.5"
-                                    title="Remove document"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
+                                <>
+                                    <span className="text-xs text-slate-500">
+                                        {(contextStatus.documentCharCount / 1000).toFixed(1)}k
+                                    </span>
+                                    <button 
+                                        onClick={clearDocument}
+                                        className="text-slate-500 hover:text-red-400 p-0.5"
+                                        title="Remove document"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </>
                             )}
                         </div>
+
+                        {/* Processing Error */}
+                        {contextStatus.processingError && (
+                            <div className="text-xs text-red-400 bg-red-950/30 p-2 rounded border border-red-900/50">
+                                {contextStatus.processingError}
+                            </div>
+                        )}
                         
                         {/* Platform */}
                         <div className="flex items-center gap-2">
@@ -524,9 +675,14 @@ export default function App() {
                     <div className="flex gap-2 mt-3">
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded border border-slate-700 flex items-center justify-center gap-1"
+                            disabled={contextStatus.isProcessing}
+                            className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 py-1.5 px-2 rounded border border-slate-700 flex items-center justify-center gap-1"
                         >
-                            <Upload className="w-3 h-3" />
+                            {contextStatus.isProcessing ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                                <Upload className="w-3 h-3" />
+                            )}
                             {contextStatus.hasDocument ? 'Replace Doc' : 'Upload Doc'}
                         </button>
                         <button
@@ -560,7 +716,7 @@ export default function App() {
                     </div>
                     <span className="text-xs text-slate-400">
                         {contextStatus.platform} • {contextStatus.profileCompleteness}% profile
-                        {contextStatus.hasDocument && ' • Doc loaded'}
+                        {contextStatus.hasDocument && ` • ${(contextStatus.documentCharCount / 1000).toFixed(1)}k chars`}
                     </span>
                 </button>
             )}
@@ -613,14 +769,25 @@ export default function App() {
                         ref={fileInputRef}
                         onChange={handleFileUpload}
                         className="hidden"
-                        accept=".txt,.md,.json,.csv"
+                        accept=".txt,.md,.json,.csv,.pdf,.docx"
                     />
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className={`p-2 rounded-full transition-colors ${projectContext ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
-                        title="Upload Project Context"
+                        disabled={contextStatus.isProcessing}
+                        className={`p-2 rounded-full transition-colors ${
+                            contextStatus.isProcessing 
+                                ? 'text-blue-400 bg-blue-500/10 animate-pulse' 
+                                : projectContext 
+                                    ? 'text-green-400 bg-green-500/10' 
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                        }`}
+                        title={contextStatus.isProcessing ? 'Processing...' : 'Upload Project Context'}
                     >
-                        <Upload className="w-5 h-5" />
+                        {contextStatus.isProcessing ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Upload className="w-5 h-5" />
+                        )}
                     </button>
 
                     <div className="relative flex-1">
