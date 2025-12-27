@@ -11,6 +11,69 @@ const ENDPOINTS = {
     mapFields: `${API_URL}/api/extension/map-fields`,
 };
 
+// ========== ENHANCED FIELD CONTEXT (Phase 3) ==========
+interface FieldContext {
+    // Basic
+    id: string;
+    name: string;
+    label: string;
+    placeholder: string;
+    type: string;
+    selector: string;
+    
+    // Enhanced (Phase 3)
+    characterLimit?: number;
+    wordLimit?: number;
+    format: 'plain' | 'markdown' | 'html';
+    isRequired: boolean;
+    surroundingContext: string;
+    platformHint: string;
+    fieldCategory: FieldCategory;
+    
+    // Page context
+    pageTitle: string;
+    pageUrl: string;
+}
+
+type FieldCategory = 
+    | 'elevator_pitch' 
+    | 'description' 
+    | 'inspiration' 
+    | 'technical' 
+    | 'challenges' 
+    | 'team' 
+    | 'personal_info'
+    | 'links'
+    | 'generic';
+
+// Platform-specific tips for thought bubble
+const PLATFORM_TIPS: Record<string, string[]> = {
+    DevPost: [
+        "DevPost judges love clear problem statements",
+        "Mention specific technologies and APIs used",
+        "Highlight what makes your solution unique",
+        "Include demo links or video if available"
+    ],
+    DoraHacks: [
+        "Emphasize blockchain/Web3 aspects if relevant",
+        "Highlight technical innovation",
+        "Mention open-source contributions",
+        "Show traction or community interest"
+    ],
+    MLH: [
+        "Focus on what you learned during the hackathon",
+        "Highlight team collaboration",
+        "Mention any sponsors' technologies you used",
+        "Be enthusiastic and authentic"
+    ],
+    Default: [
+        "Be specific and avoid generic statements",
+        "Use concrete examples and numbers",
+        "Keep it concise but impactful",
+        "Proofread for clarity"
+    ]
+};
+
 // ===== REAL AUTH: Extract token from ScholarStream web app =====
 if (window.location.host.includes('localhost') || window.location.host.includes('scholarstream')) {
     const extractAndSendToken = () => {
@@ -47,13 +110,13 @@ if (window.location.host.includes('localhost') || window.location.host.includes(
     setInterval(extractAndSendToken, 2000);
 }
 
-// ===== MIND-BLOWING UX: Sparkle Focus Engine =====
+// ===== INTELLIGENT SPARKLE ENGINE (Phase 3) =====
 class FocusEngine {
     private activeElement: HTMLElement | null = null;
     private sparkleBtn: HTMLDivElement;
     private tooltip: HTMLDivElement;
     private thoughtBubble: HTMLDivElement;
-    private guidanceBubble: HTMLDivElement; // NEW: Guidance for missing context
+    private guidanceBubble: HTMLDivElement;
     private isStreaming = false;
     private isDragging = false;
     private dragOffset = { x: 0, y: 0 };
@@ -136,6 +199,7 @@ class FocusEngine {
             @keyframes ss-fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             #ss-sparkle-container.dragging { cursor: grabbing !important; }
             @keyframes ss-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+            @keyframes ss-spin { to { transform: rotate(360deg); } }
         `;
         document.head.appendChild(style);
         document.body.appendChild(container);
@@ -204,18 +268,19 @@ class FocusEngine {
 
     private createThoughtBubble() {
         const div = document.createElement('div');
+        div.id = 'ss-thought-bubble';
         div.style.cssText = `
             position: absolute;
             display: none;
             background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
             color: #e2e8f0;
-            padding: 12px 16px;
+            padding: 14px 18px;
             border-radius: 12px;
             border: 1px solid #334155;
             font-size: 13px;
             font-family: 'Inter', system-ui, sans-serif;
-            line-height: 1.4;
-            max-width: 320px;
+            line-height: 1.5;
+            max-width: 360px;
             z-index: 2147483647;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
             pointer-events: none;
@@ -305,16 +370,51 @@ class FocusEngine {
         }
     }
 
-    private showReasoning(text: string, target: HTMLElement) {
-        if (!text || !target) return;
+    // ========== ENHANCED THOUGHT BUBBLE (Phase 3) ==========
+    private showEnhancedReasoning(
+        reasoning: string, 
+        target: HTMLElement, 
+        fieldContext: FieldContext,
+        wasTemplateUsed: boolean
+    ) {
+        if (!target) return;
 
         const rect = target.getBoundingClientRect();
         const top = rect.bottom + window.scrollY + 8;
         const left = rect.left + window.scrollX;
 
-        this.thoughtBubble.innerHTML = `<span style="color: #4ECDC4; font-weight: 600;">🧠 AI Thought:</span> ${text}`;
+        // Get platform-specific tips
+        const platformTips = PLATFORM_TIPS[fieldContext.platformHint] || PLATFORM_TIPS.Default;
+        const randomTip = platformTips[Math.floor(Math.random() * platformTips.length)];
+
+        // Build thought bubble content
+        let content = `<div style="margin-bottom: 8px;"><span style="color: #4ECDC4; font-weight: 600;">🧠 AI Thought:</span> ${reasoning}</div>`;
+        
+        // Add character/word limit info if applicable
+        if (fieldContext.characterLimit) {
+            content += `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">📏 Character limit: ${fieldContext.characterLimit}</div>`;
+        }
+        if (fieldContext.wordLimit) {
+            content += `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">📝 Word limit: ~${fieldContext.wordLimit}</div>`;
+        }
+
+        // Add format hint
+        if (fieldContext.format === 'markdown') {
+            content += `<div style="font-size: 11px; color: #60a5fa; margin-bottom: 6px;">📑 Markdown formatting supported</div>`;
+        }
+
+        // Add platform tip
+        content += `<div style="font-size: 11px; color: #fbbf24; margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155;">💡 Tip: ${randomTip}</div>`;
+
+        // Add template warning if used
+        if (wasTemplateUsed) {
+            content += `<div style="font-size: 11px; color: #f87171; margin-top: 6px;">⚠️ Template used - replace [BRACKETS] with your info</div>`;
+        }
+
+        this.thoughtBubble.innerHTML = content;
         this.thoughtBubble.style.top = `${top}px`;
         this.thoughtBubble.style.left = `${left}px`;
+        this.thoughtBubble.style.maxWidth = `${Math.min(360, window.innerWidth - left - 20)}px`;
         this.thoughtBubble.style.display = 'block';
 
         void this.thoughtBubble.offsetWidth;
@@ -322,6 +422,8 @@ class FocusEngine {
         this.thoughtBubble.style.opacity = '1';
         this.thoughtBubble.style.transform = 'translateY(0)';
 
+        // Auto-hide after 8 seconds (longer for templates)
+        const hideDelay = wasTemplateUsed ? 10000 : 6000;
         setTimeout(() => {
             this.thoughtBubble.style.opacity = '0';
             this.thoughtBubble.style.transform = 'translateY(10px)';
@@ -330,7 +432,7 @@ class FocusEngine {
                     this.thoughtBubble.style.display = 'none';
                 }
             }, 300);
-        }, 6000);
+        }, hideDelay);
     }
 
     private showGuidanceBubble(target: HTMLElement, hasProfile: boolean, hasDocument: boolean, fieldType: string) {
@@ -387,7 +489,6 @@ class FocusEngine {
         this.guidanceBubble.style.opacity = '1';
         this.guidanceBubble.style.transform = 'translateY(0)';
 
-        // Add button listeners
         setTimeout(() => {
             document.getElementById('ss-guidance-upload')?.addEventListener('click', () => {
                 chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' });
@@ -412,6 +513,177 @@ class FocusEngine {
         }, 300);
     }
 
+    // ========== ENHANCED FIELD ANALYSIS (Phase 3) ==========
+    private analyzeField(target: HTMLInputElement | HTMLTextAreaElement): FieldContext {
+        const label = this.getLabel(target);
+        const placeholder = target.placeholder || '';
+        const combinedText = (label + ' ' + placeholder).toLowerCase();
+
+        // Detect character/word limits
+        const characterLimit = this.detectCharacterLimit(target);
+        const wordLimit = this.detectWordLimit(target, label);
+
+        // Detect format (markdown support)
+        const format = this.detectFormat(target, combinedText);
+
+        // Get surrounding context (nearby headings, descriptions)
+        const surroundingContext = this.getSurroundingContext(target);
+
+        // Detect platform
+        const platformHint = this.detectPlatform();
+
+        // Categorize field
+        const fieldCategory = this.categorizeFieldEnhanced(label, placeholder, surroundingContext);
+
+        return {
+            id: target.id,
+            name: target.name || '',
+            label,
+            placeholder,
+            type: target.type || target.tagName.toLowerCase(),
+            selector: uniqueSelector(target),
+            characterLimit,
+            wordLimit,
+            format,
+            isRequired: target.required || target.hasAttribute('aria-required'),
+            surroundingContext,
+            platformHint,
+            fieldCategory,
+            pageTitle: document.title,
+            pageUrl: window.location.href,
+        };
+    }
+
+    private detectCharacterLimit(target: HTMLInputElement | HTMLTextAreaElement): number | undefined {
+        // Check maxlength attribute
+        if (target.maxLength && target.maxLength > 0 && target.maxLength < 1000000) {
+            return target.maxLength;
+        }
+
+        // Check for nearby character counter elements
+        const parent = target.parentElement;
+        if (parent) {
+            const counterText = parent.innerText.match(/(\d+)\s*\/\s*(\d+)/);
+            if (counterText) {
+                return parseInt(counterText[2], 10);
+            }
+        }
+
+        // Check data attributes
+        const dataMax = target.getAttribute('data-max-length') || target.getAttribute('data-maxlength');
+        if (dataMax) return parseInt(dataMax, 10);
+
+        return undefined;
+    }
+
+    private detectWordLimit(target: HTMLElement, label: string): number | undefined {
+        const combinedText = label.toLowerCase();
+        
+        // Common patterns: "300 words", "max 500 words", "word limit: 250"
+        const wordMatch = combinedText.match(/(\d+)\s*words?/i);
+        if (wordMatch) {
+            return parseInt(wordMatch[1], 10);
+        }
+
+        // Check surrounding elements
+        const parent = target.parentElement;
+        if (parent) {
+            const parentText = parent.innerText.toLowerCase();
+            const parentMatch = parentText.match(/(\d+)\s*words?/i);
+            if (parentMatch) {
+                return parseInt(parentMatch[1], 10);
+            }
+        }
+
+        return undefined;
+    }
+
+    private detectFormat(target: HTMLElement, combinedText: string): 'plain' | 'markdown' | 'html' {
+        // Check for markdown indicators
+        if (
+            combinedText.includes('markdown') ||
+            combinedText.includes('supports formatting') ||
+            target.classList.contains('markdown') ||
+            target.getAttribute('data-format') === 'markdown' ||
+            // DevPost submission fields typically support markdown
+            (window.location.hostname.includes('devpost') && target.tagName === 'TEXTAREA')
+        ) {
+            return 'markdown';
+        }
+
+        // Check for rich text editor indicators
+        if (target.isContentEditable || target.classList.contains('richtext') || target.classList.contains('wysiwyg')) {
+            return 'html';
+        }
+
+        return 'plain';
+    }
+
+    private getSurroundingContext(target: HTMLElement): string {
+        const parts: string[] = [];
+
+        // Get nearby heading
+        let el: HTMLElement | null = target;
+        for (let i = 0; i < 5 && el; i++) {
+            el = el.parentElement;
+            if (el) {
+                const heading = el.querySelector('h1, h2, h3, h4, h5, h6');
+                if (heading) {
+                    parts.push(`Section: ${heading.textContent?.trim()}`);
+                    break;
+                }
+            }
+        }
+
+        // Get helper text (common patterns)
+        const parent = target.parentElement;
+        if (parent) {
+            const helper = parent.querySelector('.helper-text, .hint, .description, [class*="help"], small');
+            if (helper && helper.textContent) {
+                parts.push(`Hint: ${helper.textContent.trim().slice(0, 200)}`);
+            }
+        }
+
+        // Get label's additional info
+        const labelEl = document.querySelector(`label[for="${target.id}"]`);
+        if (labelEl) {
+            const small = labelEl.querySelector('small, span.optional, span.required');
+            if (small && small.textContent) {
+                parts.push(small.textContent.trim());
+            }
+        }
+
+        return parts.join(' | ').slice(0, 500);
+    }
+
+    private detectPlatform(): string {
+        const url = window.location.href.toLowerCase();
+        if (url.includes('devpost.com')) return 'DevPost';
+        if (url.includes('dorahacks.io')) return 'DoraHacks';
+        if (url.includes('mlh.io')) return 'MLH';
+        if (url.includes('taikai.network')) return 'Taikai';
+        if (url.includes('gitcoin.co')) return 'Gitcoin';
+        if (url.includes('immunefi.com')) return 'Immunefi';
+        if (url.includes('hackerone.com')) return 'HackerOne';
+        if (url.includes('intigriti.com')) return 'Intigriti';
+        return 'Default';
+    }
+
+    private categorizeFieldEnhanced(label: string, placeholder: string, context: string): FieldCategory {
+        const text = (label + ' ' + placeholder + ' ' + context).toLowerCase();
+        
+        if (text.includes('elevator') || text.includes('pitch') || text.includes('tagline')) return 'elevator_pitch';
+        if (text.includes('description') || text.includes('about') || text.includes('overview')) return 'description';
+        if (text.includes('inspiration') || text.includes('why') || text.includes('motivation') || text.includes('what inspired')) return 'inspiration';
+        if (text.includes('built') || text.includes('how') || text.includes('technical') || text.includes('architecture') || text.includes('stack')) return 'technical';
+        if (text.includes('challenge') || text.includes('obstacle') || text.includes('difficult') || text.includes('learned')) return 'challenges';
+        if (text.includes('team') || text.includes('member') || text.includes('collaborat')) return 'team';
+        if (text.includes('name') || text.includes('email') || text.includes('phone') || text.includes('linkedin') || text.includes('github')) return 'personal_info';
+        if (text.includes('url') || text.includes('link') || text.includes('demo') || text.includes('video') || text.includes('repo')) return 'links';
+        
+        return 'generic';
+    }
+
     private async handleSparkleClick() {
         if (!this.activeElement || this.isStreaming) return;
 
@@ -422,25 +694,22 @@ class FocusEngine {
         const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
         const hasDocument = !!stored.projectContext;
 
-        // Determine field type for guidance message
-        const fieldLabel = this.getLabel(target);
-        const fieldType = this.categorizeField(fieldLabel, (target as any).placeholder || '');
+        // Enhanced field analysis
+        const fieldContext = this.analyzeField(target);
 
         // Show guidance if missing critical context for project-specific fields
-        const needsProjectContext = ['elevator pitch', 'description', 'about', 'inspiration', 'how built', 'challenges'].some(
-            keyword => fieldLabel.toLowerCase().includes(keyword) || ((target as any).placeholder || '').toLowerCase().includes(keyword)
-        );
+        const needsProjectContext = ['elevator_pitch', 'description', 'inspiration', 'technical', 'challenges'].includes(fieldContext.fieldCategory);
 
         if (needsProjectContext && !hasDocument && !hasProfile) {
-            this.showGuidanceBubble(target, hasProfile, hasDocument, fieldType);
+            this.showGuidanceBubble(target, hasProfile, hasDocument, fieldContext.fieldCategory.replace('_', ' '));
             return;
         }
 
         // Generate with available context
-        await this.generateWithAvailableContext();
+        await this.generateWithEnhancedContext(fieldContext, hasProfile, hasDocument);
     }
 
-    private async generateWithAvailableContext() {
+    private async generateWithEnhancedContext(fieldContext: FieldContext, hasProfile: boolean, hasDocument: boolean) {
         if (!this.activeElement) return;
 
         this.isStreaming = true;
@@ -449,34 +718,32 @@ class FocusEngine {
         // Animation: Spin
         const btn = this.sparkleBtn.querySelector('#ss-sparkle-trigger');
         if (btn) {
-            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2C6.48 2 2 6.48 2 12" opacity="0.75"/></svg>`;
+            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="animation: ss-spin 1s linear infinite;"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2C6.48 2 2 6.48 2 12" opacity="0.75"/></svg>`;
         }
 
         try {
-            const fieldData = {
-                id: target.id,
-                name: (target as any).name,
-                type: (target as any).type,
-                placeholder: (target as any).placeholder || '',
-                label: this.getLabel(target),
-                surroundingText: "",
-                pageTitle: document.title,
-                pageUrl: window.location.href
-            };
+            const result = await generateFieldContentEnhanced(fieldContext, hasProfile, hasDocument);
 
-            const result = await generateFieldContent(fieldData);
-
-            const content = result.sparkle_result?.content || result.filled_value;
-            const reasoning = result.sparkle_result?.reasoning || result.reasoning;
+            const content = result.sparkle_result?.content || result.filled_value || result.template_content;
+            const reasoning = result.sparkle_result?.reasoning || result.reasoning || 'Generated based on available context';
+            const wasTemplateUsed = !!result.template_content || (content && content.includes('['));
 
             if (content) {
-                if (reasoning) {
-                    this.showReasoning(reasoning, target);
-                }
+                // Show enhanced reasoning with tips
+                this.showEnhancedReasoning(reasoning, target, fieldContext, wasTemplateUsed);
+                
+                // Typewriter effect
                 await this.typewriterEffect(target, content);
             }
         } catch (e) {
             console.error("Focus Fill Failed", e);
+            // Show error feedback
+            this.showEnhancedReasoning(
+                "Failed to generate content. Try again or check your connection.",
+                target,
+                fieldContext,
+                false
+            );
         } finally {
             this.isStreaming = false;
             const btn = this.sparkleBtn.querySelector('#ss-sparkle-trigger');
@@ -486,14 +753,15 @@ class FocusEngine {
         }
     }
 
-    private categorizeField(label: string, placeholder: string): string {
-        const text = (label + ' ' + placeholder).toLowerCase();
-        if (text.includes('elevator') || text.includes('pitch')) return 'elevator pitch';
-        if (text.includes('description') || text.includes('about')) return 'description';
-        if (text.includes('inspiration') || text.includes('why')) return 'inspiration';
-        if (text.includes('built') || text.includes('how')) return 'technical explanation';
-        if (text.includes('challenge')) return 'challenges section';
-        return 'response';
+    // Legacy method for backward compatibility
+    private async generateWithAvailableContext() {
+        if (!this.activeElement) return;
+        const target = this.activeElement as HTMLInputElement;
+        const fieldContext = this.analyzeField(target);
+        const stored = await chrome.storage.local.get(['userProfile', 'projectContext']);
+        const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
+        const hasDocument = !!stored.projectContext;
+        await this.generateWithEnhancedContext(fieldContext, hasProfile, hasDocument);
     }
 
     private getLabel(el: HTMLElement): string {
@@ -531,7 +799,86 @@ class FocusEngine {
 // Initialize Focus Engine
 new FocusEngine();
 
-// API Helper for Single Field
+// ========== ENHANCED API HELPER (Phase 3) ==========
+async function generateFieldContentEnhanced(
+    fieldContext: FieldContext,
+    hasProfile: boolean,
+    hasDocument: boolean
+) {
+    let userProfile: any = {};
+    let projectContext = "";
+
+    try {
+        const stored = await chrome.storage.local.get(['userProfile', 'projectContext']);
+        userProfile = stored.userProfile || {};
+        projectContext = stored.projectContext || "";
+    } catch (e) { }
+
+    const storedToken = (await chrome.storage.local.get(['authToken'])).authToken;
+    if (!storedToken) {
+        throw new Error('Not authenticated');
+    }
+
+    // Build enhanced instruction based on field analysis
+    let instruction = `Fill this ${fieldContext.fieldCategory.replace('_', ' ')} field.`;
+    
+    if (fieldContext.characterLimit) {
+        instruction += ` Keep under ${fieldContext.characterLimit} characters.`;
+    }
+    if (fieldContext.wordLimit) {
+        instruction += ` Aim for approximately ${fieldContext.wordLimit} words.`;
+    }
+    if (fieldContext.format === 'markdown') {
+        instruction += ` Use markdown formatting for emphasis and structure.`;
+    }
+    if (fieldContext.surroundingContext) {
+        instruction += ` Context: ${fieldContext.surroundingContext}`;
+    }
+
+    // Request template if no context available
+    if (!hasProfile && !hasDocument) {
+        instruction += ` Since no profile or project context is available, generate a helpful template with [PLACEHOLDER] brackets that the user can fill in.`;
+    } else if (!hasDocument && ['elevator_pitch', 'description', 'technical', 'challenges'].includes(fieldContext.fieldCategory)) {
+        instruction += ` No project document uploaded - use profile info and generate helpful content with [PROJECT SPECIFIC DETAILS] placeholders where needed.`;
+    }
+
+    const response = await fetch(ENDPOINTS.mapFields, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${storedToken}`
+        },
+        body: JSON.stringify({
+            form_fields: [],
+            user_profile: userProfile,
+            target_field: {
+                ...fieldContext,
+                // Flatten for backend compatibility
+                id: fieldContext.id,
+                name: fieldContext.name,
+                type: fieldContext.type,
+                placeholder: fieldContext.placeholder,
+                label: fieldContext.label,
+                characterLimit: fieldContext.characterLimit,
+                wordLimit: fieldContext.wordLimit,
+                format: fieldContext.format,
+                fieldCategory: fieldContext.fieldCategory,
+                platformHint: fieldContext.platformHint,
+            },
+            project_context: projectContext,
+            instruction
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
+
+    return await response.json();
+}
+
+// Legacy helper for backward compatibility
 async function generateFieldContent(targetField: any) {
     let userProfile: any = {};
     try {
@@ -540,9 +887,7 @@ async function generateFieldContent(targetField: any) {
     } catch (e) { }
 
     const storedToken = (await chrome.storage.local.get(['authToken'])).authToken;
-    const authToken = storedToken;
-
-    if (!authToken) {
+    if (!storedToken) {
         throw new Error('Not authenticated');
     }
 
@@ -556,7 +901,7 @@ async function generateFieldContent(targetField: any) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
+            'Authorization': `Bearer ${storedToken}`
         },
         body: JSON.stringify({
             form_fields: [],
@@ -587,6 +932,13 @@ const safeSendMessage = async (message: any) => {
         }
     }
 };
+
+// Unique selector generator
+function uniqueSelector(el: Element): string {
+    if (el.id) return `#${el.id}`;
+    if ((el as any).name) return `[name="${(el as any).name}"]`;
+    return el.tagName.toLowerCase();
+}
 
 // Listen for context requests and Auto-Fill commands
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -642,9 +994,7 @@ async function handleAutoFill(projectContext?: string) {
 
     try {
         const storedToken = (await chrome.storage.local.get(['authToken'])).authToken;
-        const authToken = storedToken;
-
-        if (!authToken) {
+        if (!storedToken) {
             return { success: false, message: "Please sign in securely through the extension first." };
         }
 
@@ -653,7 +1003,7 @@ async function handleAutoFill(projectContext?: string) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${storedToken}`
             },
             body: JSON.stringify({
                 form_fields: formFields,
@@ -691,12 +1041,6 @@ async function handleAutoFill(projectContext?: string) {
         console.error("Auto-Fill Failed:", error);
         return { success: false, error: String(error) };
     }
-}
-
-function uniqueSelector(el: Element): string {
-    if (el.id) return `#${el.id}`;
-    if ((el as any).name) return `[name="${(el as any).name}"]`;
-    return el.tagName.toLowerCase();
 }
 
 // ===== SIDE PANEL TRIGGER (PULSE ICON) =====
