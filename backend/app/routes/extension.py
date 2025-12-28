@@ -183,18 +183,17 @@ async def map_form_fields(
             
             from app.services.copilot_service import copilot_service
             
+            # Pass project_context and instruction to generate_field_content
             result = await copilot_service.generate_field_content(
                 target_field=request.target_field,
                 user_profile=user_profile,
-                instruction=request.instruction
+                instruction=request.instruction,
+                page_url=request.target_field.get('pageUrl', ''),
+                project_context=project_context  # Now passing project context!
             )
             
             return {
-                "field_mappings": {
-                    # We return a single mapping for the target selector
-                    # Ideally the frontend knows which selector it sent, but we can verify
-                    # For now, we map it to the "sparkle_result" key + the selector.
-                },
+                "field_mappings": {},
                 "sparkle_result": {
                     "content": result['content'],
                     "reasoning": result['reasoning']
