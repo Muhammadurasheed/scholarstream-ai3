@@ -160,6 +160,7 @@ export const OpportunityCard = ({
     e.stopPropagation();
     onStartApplication(scholarship.id);
 
+    // Smart fallback: try source_url, then navigate to details page
     if (scholarship.source_url) {
       const normalizedUrl = normalizeApplyUrl(scholarship.source_url);
       window.open(normalizedUrl, '_blank', 'noopener,noreferrer');
@@ -168,10 +169,11 @@ export const OpportunityCard = ({
         description: 'Good luck with your application!',
       });
     } else {
+      // Fallback: navigate to detail page with application instructions
+      navigate(`/opportunity/${scholarship.id}`);
       toast({
-        variant: 'destructive',
-        title: 'No application link',
-        description: 'Application URL not available.',
+        title: 'Opening details',
+        description: 'Check the opportunity page for application link.',
       });
     }
   };

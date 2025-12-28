@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw } from 'lucide-react';
+import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw, Plus, AtSign, Trash2 } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
 import { ENDPOINTS, detectPlatform, calculateProfileCompleteness, parseDocument, generateDocumentId, type ContextStatus, type UploadedDocument } from '../config';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface Message {
     id: string;
@@ -11,15 +12,25 @@ interface Message {
     text: string;
 }
 
+// Multi-document support
+interface DocumentStore {
+    documents: UploadedDocument[];
+    activeDocIds: string[]; // Selected via @ mention
+}
+
 export default function App() {
     const [messages, setMessages] = useState<Message[]>([
-        { id: '1', role: 'assistant', text: 'Hello! I am your ScholarStream Co-Pilot. I can help you apply for this opportunity. Upload your project doc or ask me anything!' }
+        { id: '1', role: 'assistant', text: 'Hello! I am your ScholarStream Co-Pilot. I can help you apply for this opportunity.\n\n**Tips to get started:**\n- Upload documents using the + button\n- Use **@docname** to reference specific docs\n- Click the ✨ sparkle on any field for AI assistance' }
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [isListening, setIsListening] = useState(false);
-    const [projectContext, setProjectContext] = useState<string | null>(null);
-    const [projectFileName, setProjectFileName] = useState<string | null>(null);
+    
+    // Multi-document state
+    const [documentStore, setDocumentStore] = useState<DocumentStore>({ documents: [], activeDocIds: [] });
+    const [showDocSelector, setShowDocSelector] = useState(false);
+    const [mentionFilter, setMentionFilter] = useState('');
+    
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,9 +62,9 @@ export default function App() {
 
     useEffect(scrollToBottom, [messages]);
 
-    // Check for existing token and profile on mount
+    // Check for existing token, profile and documents on mount
     useEffect(() => {
-        chrome.storage.local.get(['authToken', 'userProfile', 'projectContext', 'projectFileName', 'documentMeta'], (result) => {
+        chrome.storage.local.get(['authToken', 'userProfile', 'documentStore'], (result) => {
             if (result.authToken) {
                 setAuthToken(result.authToken);
             }
@@ -64,15 +75,16 @@ export default function App() {
                     profileCompleteness: calculateProfileCompleteness(result.userProfile)
                 }));
             }
-            if (result.projectContext) {
-                setProjectContext(result.projectContext);
-                setProjectFileName(result.projectFileName || 'document.txt');
-                const meta = result.documentMeta || {};
+            // Load multi-document store
+            if (result.documentStore) {
+                const store = result.documentStore as DocumentStore;
+                setDocumentStore(store);
+                const totalChars = store.documents.reduce((sum, d) => sum + d.charCount, 0);
                 setContextStatus(prev => ({
                     ...prev,
-                    hasDocument: true,
-                    documentName: result.projectFileName || 'document.txt',
-                    documentCharCount: meta.charCount || result.projectContext.length,
+                    hasDocument: store.documents.length > 0,
+                    documentName: store.documents.length > 0 ? `${store.documents.length} docs` : null,
+                    documentCharCount: totalChars,
                 }));
             }
         });
@@ -225,153 +237,150 @@ export default function App() {
         recognition.start();
     };
 
-    // Enhanced File Upload Handler with Backend Parsing
+    // Enhanced File Upload Handler - Multi-document support
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Update UI to show processing
-        setContextStatus(prev => ({
-            ...prev,
-            isProcessing: true,
-            processingError: null,
-        }));
+        setContextStatus(prev => ({ ...prev, isProcessing: true, processingError: null }));
 
-        // Check file type for smart parsing
         const filename = file.name.toLowerCase();
         const needsBackendParsing = filename.endsWith('.pdf') || filename.endsWith('.docx');
 
+        let content = '';
+        let charCount = 0;
+        let fileType = 'text';
+
         if (needsBackendParsing && authToken) {
-            // Use backend for PDF/DOCX parsing
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
                 role: 'assistant',
-                text: `📄 Processing "${file.name}"... Extracting text content.`
+                text: `📄 Processing **${file.name}**... Extracting text content.`
             }]);
 
             const result = await parseDocument(file, authToken);
-
-            if (result.success) {
-                setProjectContext(result.content);
-                setProjectFileName(file.name);
-
-                const documentMeta: UploadedDocument = {
-                    id: generateDocumentId(),
-                    filename: file.name,
-                    content: result.content,
-                    uploadedAt: Date.now(),
-                    charCount: result.charCount,
-                    fileType: result.fileType,
-                    platformHint: contextStatus.platform,
-                };
-
-                // Persist Context
-                await chrome.storage.local.set({
-                    projectContext: result.content,
-                    projectFileName: file.name,
-                    documentMeta,
-                });
-
-                setContextStatus(prev => ({
-                    ...prev,
-                    hasDocument: true,
-                    documentName: file.name,
-                    documentCharCount: result.charCount,
-                    isProcessing: false,
-                    processingError: null,
-                }));
-
-                setMessages(prev => [...prev, {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    text: `✅ Successfully extracted ${result.charCount.toLocaleString()} characters from "${file.name}". I'll use this context to help with your application!`
-                }]);
-            } else {
-                setContextStatus(prev => ({
-                    ...prev,
-                    isProcessing: false,
-                    processingError: result.error || 'Failed to parse document',
-                }));
-
-                setMessages(prev => [...prev, {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    text: `❌ Failed to parse "${file.name}": ${result.error}. Try a different format (TXT, MD, or ensure the PDF isn't password protected).`
-                }]);
-            }
-        } else {
-            // Simple text reading for TXT/MD/JSON
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const text = e.target?.result as string;
-                setProjectContext(text);
-                setProjectFileName(file.name);
-
-                const documentMeta: UploadedDocument = {
-                    id: generateDocumentId(),
-                    filename: file.name,
-                    content: text,
-                    uploadedAt: Date.now(),
-                    charCount: text.length,
-                    fileType: 'text',
-                    platformHint: contextStatus.platform,
-                };
-
-                // Persist Context
-                await chrome.storage.local.set({
-                    projectContext: text,
-                    projectFileName: file.name,
-                    documentMeta,
-                });
-
-                setContextStatus(prev => ({
-                    ...prev,
-                    hasDocument: true,
-                    documentName: file.name,
-                    documentCharCount: text.length,
-                    isProcessing: false,
-                    processingError: null,
-                }));
-
+            if (!result.success) {
+                setContextStatus(prev => ({ ...prev, isProcessing: false, processingError: result.error || 'Failed' }));
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: 'assistant',
-                    text: `✅ Loaded "${file.name}" (${text.length.toLocaleString()} chars). I'll use this context for your answers.`
+                    text: `❌ Failed to parse "${file.name}": ${result.error}`
                 }]);
-            };
-            reader.onerror = () => {
-                setContextStatus(prev => ({
-                    ...prev,
-                    isProcessing: false,
-                    processingError: 'Failed to read file',
-                }));
-            };
-            reader.readAsText(file);
+                return;
+            }
+            content = result.content;
+            charCount = result.charCount;
+            fileType = result.fileType;
+        } else {
+            // Simple text reading
+            content = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target?.result as string);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+            charCount = content.length;
         }
 
-        // Reset file input
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
-    };
+        // Create new document entry
+        const newDoc: UploadedDocument = {
+            id: generateDocumentId(),
+            filename: file.name,
+            content,
+            uploadedAt: Date.now(),
+            charCount,
+            fileType,
+            platformHint: contextStatus.platform,
+        };
 
-    // Clear document context
-    const clearDocument = () => {
-        setProjectContext(null);
-        setProjectFileName(null);
-        chrome.storage.local.remove(['projectContext', 'projectFileName', 'documentMeta']);
+        // Add to document store
+        const updatedStore: DocumentStore = {
+            documents: [...documentStore.documents, newDoc],
+            activeDocIds: [...documentStore.activeDocIds, newDoc.id], // Auto-activate new doc
+        };
+        setDocumentStore(updatedStore);
+
+        // Persist to storage
+        await chrome.storage.local.set({ documentStore: updatedStore });
+
+        const totalChars = updatedStore.documents.reduce((sum, d) => sum + d.charCount, 0);
         setContextStatus(prev => ({
             ...prev,
-            hasDocument: false,
-            documentName: null,
-            documentCharCount: 0,
+            hasDocument: true,
+            documentName: `${updatedStore.documents.length} docs`,
+            documentCharCount: totalChars,
+            isProcessing: false,
             processingError: null,
         }));
+
         setMessages(prev => [...prev, {
             id: Date.now().toString(),
             role: 'assistant',
-            text: '📄 Document context cleared.'
+            text: `✅ Added **${file.name}** (${charCount.toLocaleString()} chars) to your knowledge base.\n\nUse **@${file.name.split('.')[0]}** in chat to reference it, or it will be used automatically.`
         }]);
+
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    // Remove a document from the store
+    const removeDocument = async (docId: string) => {
+        const doc = documentStore.documents.find(d => d.id === docId);
+        const updatedStore: DocumentStore = {
+            documents: documentStore.documents.filter(d => d.id !== docId),
+            activeDocIds: documentStore.activeDocIds.filter(id => id !== docId),
+        };
+        setDocumentStore(updatedStore);
+        await chrome.storage.local.set({ documentStore: updatedStore });
+
+        const totalChars = updatedStore.documents.reduce((sum, d) => sum + d.charCount, 0);
+        setContextStatus(prev => ({
+            ...prev,
+            hasDocument: updatedStore.documents.length > 0,
+            documentName: updatedStore.documents.length > 0 ? `${updatedStore.documents.length} docs` : null,
+            documentCharCount: totalChars,
+        }));
+
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'assistant',
+            text: `📄 Removed **${doc?.filename || 'document'}** from knowledge base.`
+        }]);
+    };
+
+    // Get combined project context from active documents
+    const getActiveProjectContext = (): string | null => {
+        const activeDocs = documentStore.documents.filter(d => documentStore.activeDocIds.includes(d.id));
+        if (activeDocs.length === 0) {
+            // If no specific docs selected, use all
+            if (documentStore.documents.length > 0) {
+                return documentStore.documents.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
+            }
+            return null;
+        }
+        return activeDocs.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
+    };
+
+    // Parse @ mentions from input and update active docs
+    const parseAndActivateMentions = (text: string): string => {
+        const mentionPattern = /@(\S+)/g;
+        const mentions = text.match(mentionPattern) || [];
+        
+        if (mentions.length > 0) {
+            const mentionedNames = mentions.map(m => m.slice(1).toLowerCase());
+            const matchedDocs = documentStore.documents.filter(d => 
+                mentionedNames.some(name => d.filename.toLowerCase().includes(name))
+            );
+            
+            if (matchedDocs.length > 0) {
+                setDocumentStore(prev => ({
+                    ...prev,
+                    activeDocIds: matchedDocs.map(d => d.id)
+                }));
+            }
+        }
+        
+        // Return text with mentions removed for cleaner query
+        return text.replace(mentionPattern, '').trim();
     };
 
     const handleSend = async () => {
@@ -395,7 +404,10 @@ export default function App() {
                 console.warn("Could not get page context:", e);
             }
 
-            // 2. Call Backend API
+            // 2. Call Backend API with active document context
+            const cleanQuery = parseAndActivateMentions(userMsg.text);
+            const projectContext = getActiveProjectContext();
+            
             const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
                 headers: {
@@ -403,7 +415,7 @@ export default function App() {
                     'Authorization': `Bearer ${authToken}`
                 },
                 body: JSON.stringify({
-                    query: userMsg.text,
+                    query: cleanQuery,
                     page_context: context,
                     project_context: projectContext
                 })
@@ -717,11 +729,11 @@ export default function App() {
                                 <Bot className="w-5 h-5" />
                             </div>
                         )}
-                        <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.role === 'user'
+                        <div className={`max-w-[85%] rounded-xl p-3 ${msg.role === 'user'
                             ? 'bg-blue-600 text-white'
-                            : 'bg-slate-800 text-slate-200 border border-slate-700'
+                            : 'bg-slate-800 border border-slate-700'
                             }`}>
-                            {msg.text}
+                            <MarkdownMessage content={msg.text} role={msg.role} />
                         </div>
                         {msg.role === 'user' && (
                             <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center shrink-0">
