@@ -3,8 +3,8 @@
 // Handles Push Notifications via WebSocket with REAL Firebase Auth
 
 // API Configuration
-const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__' 
-    ? '__VITE_API_URL__' 
+const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__'
+    ? '__VITE_API_URL__'
     : 'http://localhost:8081';
 const WS_URL = API_URL.replace('http', 'ws') + '/ws/opportunities';
 
@@ -48,6 +48,41 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
             currentAuthToken = newToken;
             reconnectWithNewToken();
         }
+    }
+});
+
+// --- Unified Auth Listener (Web App -> Extension) ---
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+    // 1. Security Check: Validate Sender Origin
+    const allowedOrigins = [
+        'http://localhost:8081',
+        'http://localhost:8080',
+        'http://localhost:5173',
+        'https://scholarstream.app',
+        'https://scholarstream.lovable.app'
+    ];
+
+    const origin = sender.url ? new URL(sender.url).origin : '';
+    if (!allowedOrigins.includes(origin)) {
+        console.warn(`[Auth] Blocked message from unauthorized origin: ${origin}`);
+        return; // Ignore unauthorized messages
+    }
+
+    // 2. Handle Sync Message
+    if (message.type === 'SYNC_AUTH' && message.token) {
+        console.log(`[Auth] Received Token from ${origin}`);
+
+        // Save to storage (triggers the onChanged listener above)
+        chrome.storage.local.set({
+            authToken: message.token,
+            userProfile: message.user || {}
+        }, () => {
+            console.log("[Auth] Token synced to storage!");
+            sendResponse({ success: true });
+        });
+
+        // Return true to indicate async response
+        return true;
     }
 });
 

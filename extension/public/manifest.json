@@ -57,5 +57,15 @@
                 "<all_urls>"
             ]
         }
-    ]
+    ],
+    "externally_connectable": {
+        "matches": [
+            "http://localhost:8081/*",
+            "http://localhost:8080/*",
+            "http://localhost:5173/*",
+            "https://scholarstream.app/*",
+            "https://*.scholarstream.app/*",
+            "https://scholarstream.lovable.app/*"
+        ]
+    }
 }

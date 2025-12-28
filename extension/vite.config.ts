@@ -33,6 +33,9 @@ export default defineConfig(({ mode }) => {
       ...exposeEnv(mergedEnv),
     },
     build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+      sourcemap: process.env.NODE_ENV === 'development' ? 'inline' : false,
       rollupOptions: {
         input: {
           sidepanel: resolve(__dirname, 'sidepanel.html'),
@@ -41,8 +44,7 @@ export default defineConfig(({ mode }) => {
         },
         output: {
           entryFileNames: (chunkInfo) => {
-            // Keep background and content as root-level js files
-            if (chunkInfo.name === 'background' || chunkInfo.name === 'content') {
+            if (['background', 'content', 'sidepanel'].includes(chunkInfo.name)) {
               return '[name].js';
             }
             return 'assets/[name]-[hash].js';
@@ -51,10 +53,6 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[name]-[hash][extname]',
         },
       },
-      outDir: 'dist',
-      emptyOutDir: true,
-      // Ensure source maps for debugging
-      sourcemap: process.env.NODE_ENV === 'development' ? 'inline' : false,
     },
     resolve: {
       alias: {

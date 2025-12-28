@@ -8,8 +8,9 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { syncAuthToExtension } from '@/utils/extensionSync';
 
-interface User {
+export interface User {
   uid: string;
   email: string;
   name?: string;
@@ -44,10 +45,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Fetch user profile from Firestore to check onboarding status
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          const userData = userDoc.data();
+          const firestoreUser = userDoc.data();
 
           // Sync localStorage with Firestore truth
-          if (userData?.onboarding_completed) {
+          if (firestoreUser?.onboarding_completed) {
             localStorage.setItem('scholarstream_onboarding_complete', 'true');
           } else {
             localStorage.removeItem('scholarstream_onboarding_complete');
@@ -61,6 +62,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           window.dispatchEvent(new Event('storage'));
 
           console.log('🔑 [AUTH] Token exported to localStorage for extension');
+
+          // --- UNIFIED AUTH SYNC ---
+          const userData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || undefined,
+          };
+          syncAuthToExtension(idToken, userData);
 
           setUser({
             uid: firebaseUser.uid,

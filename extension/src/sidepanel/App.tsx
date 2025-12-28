@@ -113,7 +113,7 @@ export default function App() {
             }
         };
         updatePlatform();
-        
+
         // Listen for tab changes
         chrome.tabs.onActivated?.addListener(updatePlatform);
         chrome.tabs.onUpdated?.addListener((_, changeInfo) => {
@@ -125,7 +125,7 @@ export default function App() {
     const syncProfile = async () => {
         if (!authToken) return;
         setIsSyncingProfile(true);
-        
+
         try {
             const user = auth.currentUser;
             if (user) {
@@ -266,7 +266,7 @@ export default function App() {
                 };
 
                 // Persist Context
-                await chrome.storage.local.set({ 
+                await chrome.storage.local.set({
                     projectContext: result.content,
                     projectFileName: file.name,
                     documentMeta,
@@ -318,7 +318,7 @@ export default function App() {
                 };
 
                 // Persist Context
-                await chrome.storage.local.set({ 
+                await chrome.storage.local.set({
                     projectContext: text,
                     projectFileName: file.name,
                     documentMeta,
@@ -485,69 +485,50 @@ export default function App() {
         return 'bg-red-500';
     };
 
-    // --- LOGIN SCREEN ---
+    // --- UNIFIED AUTH LANDING (No Token) ---
     if (!authToken) {
         return (
             <div className="flex flex-col h-screen bg-slate-950 text-slate-100 p-6 items-center justify-center">
                 <div className="w-full max-w-xs space-y-6">
                     <div className="flex flex-col items-center gap-2">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <Sparkles className="w-6 h-6 text-white" />
+                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-2 relative group cursor-pointer hover:scale-105 transition-transform">
+                            <Sparkles className="w-8 h-8 text-white relative z-10" />
+                            <div className="absolute inset-0 bg-white/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all opacity-50" />
                         </div>
-                        <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
                             ScholarStream
                         </h1>
-                        <p className="text-sm text-slate-400 text-center">
-                            Sign in to sync your profile and unlock AI powers.
+                        <p className="text-sm text-slate-400 text-center px-4 leading-relaxed">
+                            Sign in on our website to automatically unlock your AI Co-Pilot.
                         </p>
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-500">Email</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 transition-all outline-none"
-                                placeholder="you@example.com"
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-500">Password</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 transition-all outline-none"
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
-
-                        {authError && (
-                            <div className="flex items-center gap-2 text-red-400 text-xs bg-red-950/30 p-3 rounded-lg border border-red-900/50">
-                                <AlertCircle className="w-4 h-4 shrink-0" />
-                                <p>{authError}</p>
-                            </div>
-                        )}
-
+                    <div className="space-y-3 pt-4">
                         <button
-                            type="submit"
-                            disabled={authLoading}
-                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-all flex justify-center items-center gap-2"
+                            onClick={() => window.open('http://localhost:8080/auth', '_blank')}
+                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 rounded-xl transition-all flex justify-center items-center gap-2 shadow-lg shadow-blue-900/20 group hover:shadow-blue-500/25 active:scale-95"
                         >
-                            {authLoading ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <>
-                                    <LogIn className="w-4 h-4" />
-                                    Sign In
-                                </>
-                            )}
+                            <span>Launch Web App</span>
+                            <LogIn className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </button>
-                    </form>
+
+                        <p className="text-xs text-slate-600 text-center">
+                            Already logged in?
+                            <button
+                                onClick={() => chrome.runtime.reload()}
+                                className="text-blue-500 hover:text-blue-400 ml-1 hover:underline"
+                            >
+                                Reload Extension
+                            </button>
+                        </p>
+                    </div>
+
+                    <div className="pt-8 border-t border-slate-900/50">
+                        <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                            <div className="w-2 h-2 rounded-full bg-blue-500/50 animate-pulse"></div>
+                            Waiting for secure handshake...
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -590,7 +571,7 @@ export default function App() {
                 <div className="p-3 bg-slate-950/50 border-b border-slate-800">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-400">📄 Active Context</span>
-                        <button 
+                        <button
                             onClick={() => setShowContextPanel(false)}
                             className="text-slate-500 hover:text-slate-300 p-0.5"
                         >
@@ -608,10 +589,9 @@ export default function App() {
                                 <Circle className="w-4 h-4 text-slate-500" />
                             )}
                             <span className="text-xs text-slate-300 flex-1">Profile</span>
-                            <span className={`text-xs font-medium ${
-                                contextStatus.profileCompleteness >= 70 ? 'text-green-400' : 
+                            <span className={`text-xs font-medium ${contextStatus.profileCompleteness >= 70 ? 'text-green-400' :
                                 contextStatus.profileCompleteness >= 40 ? 'text-yellow-400' : 'text-slate-500'
-                            }`}>
+                                }`}>
                                 {contextStatus.profileCompleteness}%
                             </span>
                             <button
@@ -623,7 +603,7 @@ export default function App() {
                                 <RefreshCw className={`w-3 h-3 ${isSyncingProfile ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
-                        
+
                         {/* Document Status */}
                         <div className="flex items-center gap-2">
                             {contextStatus.isProcessing ? (
@@ -634,10 +614,10 @@ export default function App() {
                                 <Circle className="w-4 h-4 text-slate-500" />
                             )}
                             <span className="text-xs text-slate-300 flex-1 truncate">
-                                {contextStatus.isProcessing 
-                                    ? 'Processing...' 
-                                    : contextStatus.hasDocument 
-                                        ? contextStatus.documentName 
+                                {contextStatus.isProcessing
+                                    ? 'Processing...'
+                                    : contextStatus.hasDocument
+                                        ? contextStatus.documentName
                                         : 'No document'}
                             </span>
                             {contextStatus.hasDocument && (
@@ -645,7 +625,7 @@ export default function App() {
                                     <span className="text-xs text-slate-500">
                                         {(contextStatus.documentCharCount / 1000).toFixed(1)}k
                                     </span>
-                                    <button 
+                                    <button
                                         onClick={clearDocument}
                                         className="text-slate-500 hover:text-red-400 p-0.5"
                                         title="Remove document"
@@ -662,7 +642,7 @@ export default function App() {
                                 {contextStatus.processingError}
                             </div>
                         )}
-                        
+
                         {/* Platform */}
                         <div className="flex items-center gap-2">
                             <Globe className="w-4 h-4 text-blue-400" />
@@ -670,7 +650,7 @@ export default function App() {
                             <span className="text-xs font-medium text-blue-400">{contextStatus.platform}</span>
                         </div>
                     </div>
-                    
+
                     {/* Quick Actions */}
                     <div className="flex gap-2 mt-3">
                         <button
@@ -698,7 +678,7 @@ export default function App() {
 
             {/* Collapsed Context Indicator */}
             {!showContextPanel && (
-                <button 
+                <button
                     onClick={() => setShowContextPanel(true)}
                     className="px-3 py-1.5 bg-slate-950/50 border-b border-slate-800 flex items-center gap-2 hover:bg-slate-800/50 transition-colors"
                 >
@@ -774,13 +754,12 @@ export default function App() {
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={contextStatus.isProcessing}
-                        className={`p-2 rounded-full transition-colors ${
-                            contextStatus.isProcessing 
-                                ? 'text-blue-400 bg-blue-500/10 animate-pulse' 
-                                : projectContext 
-                                    ? 'text-green-400 bg-green-500/10' 
-                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                        }`}
+                        className={`p-2 rounded-full transition-colors ${contextStatus.isProcessing
+                            ? 'text-blue-400 bg-blue-500/10 animate-pulse'
+                            : projectContext
+                                ? 'text-green-400 bg-green-500/10'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
                         title={contextStatus.isProcessing ? 'Processing...' : 'Upload Project Context'}
                     >
                         {contextStatus.isProcessing ? (
