@@ -39,10 +39,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         console.log('✅ [AUTH] User authenticated:', {
           uid: firebaseUser.uid,
-          email: firebaseUser.email
+          email: firebaseUser.email,
         });
 
-        // Fetch user profile from Firestore to check onboarding status
+        // Always set user ASAP so routing/redirects don't get blocked by optional work.
+        const nextUser: User = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          name: firebaseUser.displayName || undefined,
+        };
+        setUser(nextUser);
+
+        // Export Firebase ID Token for Extension access (best-effort)
+        try {
+          const idToken = await firebaseUser.getIdToken();
+          localStorage.setItem('scholarstream_auth_token', idToken);
+          window.dispatchEvent(new Event('storage'));
+          console.log('🔑 [AUTH] Token exported to localStorage for extension');
+
+          // --- UNIFIED AUTH SYNC (best-effort, must never break web auth) ---
+          syncAuthToExtension(idToken, nextUser);
+        } catch (error) {
+          console.warn('⚠️ [AUTH] Token export / extension sync skipped:', error);
+        }
+
+        // Fetch user profile from Firestore to check onboarding status (best-effort)
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           const firestoreUser = userDoc.data();
@@ -53,32 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             localStorage.removeItem('scholarstream_onboarding_complete');
           }
-
-          // Export Firebase ID Token for Extension access
-          const idToken = await firebaseUser.getIdToken();
-          localStorage.setItem('scholarstream_auth_token', idToken);
-
-          // Dispatch event so content script sees it immediately
-          window.dispatchEvent(new Event('storage'));
-
-          console.log('🔑 [AUTH] Token exported to localStorage for extension');
-
-          // --- UNIFIED AUTH SYNC ---
-          const userData = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: firebaseUser.displayName || undefined,
-          };
-          syncAuthToExtension(idToken, userData);
-
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: firebaseUser.displayName || undefined,
-          });
         } catch (error) {
-          console.error('❌ [AUTH] Failed to fetch user profile:', error);
-          // Fallback to existing localStorage state or default
+          console.warn('⚠️ [AUTH] Firestore profile check failed (non-blocking):', error);
         }
       } else {
         console.log('👤 [AUTH] No authenticated user');
@@ -87,7 +84,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setLoading(false);
     });
-
     return () => {
       console.log('🔄 [AUTH] Cleaning up auth listener');
       unsubscribe();
