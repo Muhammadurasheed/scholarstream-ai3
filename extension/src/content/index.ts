@@ -355,8 +355,8 @@ class FocusEngine {
             border-radius: 12px;
             padding: 12px;
             box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
-            min-width: 300px;
-            max-width: 400px;
+            min-width: 320px;
+            max-width: 420px;
         `;
         overlay.innerHTML = `
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
@@ -366,12 +366,12 @@ class FocusEngine {
                 <span style="font-size: 13px; font-weight: 600; color: #e2e8f0; font-family: system-ui, sans-serif;">Refine Content</span>
                 <button id="ss-refinement-close" style="margin-left: auto; background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; padding: 0;">×</button>
             </div>
-            <input 
-                type="text" 
+            <textarea 
                 id="ss-refinement-input" 
                 placeholder="e.g., Make it more detailed, add my Python experience..."
-                style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px; font-family: system-ui, sans-serif; outline: none; box-sizing: border-box;"
-            />
+                style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px; font-family: system-ui, sans-serif; outline: none; box-sizing: border-box; min-height: 42px; max-height: 120px; resize: none; overflow-y: auto; line-height: 1.4;"
+                rows="1"
+            ></textarea>
             <div style="display: flex; gap: 8px; margin-top: 10px;">
                 <button id="ss-refinement-expand" style="flex: 1; padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; font-size: 12px; cursor: pointer; font-family: system-ui, sans-serif;">📝 More detailed</button>
                 <button id="ss-refinement-concise" style="flex: 1; padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; font-size: 12px; cursor: pointer; font-family: system-ui, sans-serif;">✂️ More concise</button>
@@ -385,13 +385,25 @@ class FocusEngine {
         overlay.querySelector('#ss-refinement-expand')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more detailed and comprehensive. Add specific examples and elaborate on key points.'));
         overlay.querySelector('#ss-refinement-concise')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more concise and to the point. Remove unnecessary words while keeping the core message.'));
         overlay.querySelector('#ss-refinement-submit')?.addEventListener('click', () => this.submitRefinement());
-        overlay.querySelector('#ss-refinement-input')?.addEventListener('keydown', (e) => {
-            if ((e as KeyboardEvent).key === 'Enter') this.submitRefinement();
+        
+        // Auto-grow textarea
+        const textarea = overlay.querySelector('#ss-refinement-input') as HTMLTextAreaElement;
+        textarea?.addEventListener('input', (e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+        });
+        textarea?.addEventListener('keydown', (e) => {
+            if ((e as KeyboardEvent).key === 'Enter' && !(e as KeyboardEvent).shiftKey) {
+                e.preventDefault();
+                this.submitRefinement();
+            }
             if ((e as KeyboardEvent).key === 'Escape') this.hideRefinementOverlay();
         });
         
         return overlay;
     }
+
 
     private initListeners() {
         document.addEventListener('focusin', (e) => this.handleFocus(e), true);
@@ -651,8 +663,8 @@ IMPORTANT:
         this.thoughtBubble.style.opacity = '1';
         this.thoughtBubble.style.transform = 'translateY(0)';
 
-        // Auto-hide after 8 seconds (longer for templates)
-        const hideDelay = wasTemplateUsed ? 10000 : 6000;
+        // Auto-hide after 12 seconds (longer for templates and refinements)
+        const hideDelay = wasTemplateUsed ? 15000 : 12000;
         setTimeout(() => {
             this.thoughtBubble.style.opacity = '0';
             this.thoughtBubble.style.transform = 'translateY(10px)';
