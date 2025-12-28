@@ -187,7 +187,7 @@ export function MarkdownMessage({ content, role }: MarkdownMessageProps) {
   };
   
   return (
-    <div className={`text-sm leading-relaxed ${isAssistant ? 'text-slate-200' : 'text-white'}`}>
+    <div className={`text-sm leading-relaxed break-words overflow-wrap-anywhere ${isAssistant ? 'text-slate-200' : 'text-white'}`} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
       {parseMarkdown(content)}
     </div>
   );

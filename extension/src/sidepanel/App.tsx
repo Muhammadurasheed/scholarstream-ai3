@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw, Plus, AtSign, Trash2 } from 'lucide-react';
+import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw, Plus, AtSign, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
@@ -33,6 +33,9 @@ export default function App() {
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+    const [mentionCursorPos, setMentionCursorPos] = useState(0);
 
     // Auth State
     const [authToken, setAuthToken] = useState<string | null>(null);
@@ -592,12 +595,15 @@ export default function App() {
             {showContextPanel && (
                 <div className="p-3 bg-slate-950/50 border-b border-slate-800">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-slate-400">📄 Active Context</span>
+                        <span className="text-xs font-medium text-slate-400 flex items-center gap-1">
+                            <FileText className="w-3 h-3" /> Active Context
+                        </span>
                         <button
                             onClick={() => setShowContextPanel(false)}
                             className="text-slate-500 hover:text-slate-300 p-0.5"
+                            title="Collapse"
                         >
-                            <X className="w-3 h-3" />
+                            <ChevronUp className="w-3 h-3" />
                         </button>
                     </div>
                     <div className="space-y-2">
@@ -725,10 +731,11 @@ export default function App() {
                             <span className="w-2 h-2 rounded-full bg-slate-500" />
                         )}
                     </div>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 flex-1">
                         {contextStatus.platform} • {contextStatus.profileCompleteness}% profile
                         {contextStatus.hasDocument && ` • ${(contextStatus.documentCharCount / 1000).toFixed(1)}k chars`}
                     </span>
+                    <ChevronDown className="w-3 h-3 text-slate-500" />
                 </button>
             )}
 
@@ -801,25 +808,100 @@ export default function App() {
                     </button>
 
                     <div className="relative flex-1">
+                        {/* @ Mention Dropdown */}
+                        {showMentionDropdown && documentStore.documents.length > 0 && (
+                            <div className="absolute bottom-full left-0 mb-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto">
+                                {documentStore.documents
+                                    .filter(doc => doc.filename.toLowerCase().includes(mentionFilter.toLowerCase()))
+                                    .map((doc) => (
+                                        <button
+                                            key={doc.id}
+                                            onClick={() => {
+                                                // Insert the document name at cursor position
+                                                const beforeAt = input.slice(0, mentionCursorPos);
+                                                const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
+                                                const newInput = `${beforeAt}@${doc.filename.split('.')[0]} ${afterMention}`;
+                                                setInput(newInput);
+                                                setShowMentionDropdown(false);
+                                                setMentionFilter('');
+                                                inputRef.current?.focus();
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <FileText className="w-4 h-4 text-blue-400" />
+                                            <span className="text-slate-200 truncate flex-1">{doc.filename}</span>
+                                            <span className="text-[10px] text-slate-500">{(doc.charCount / 1000).toFixed(1)}k</span>
+                                        </button>
+                                    ))}
+                                {documentStore.documents.filter(doc => doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 && (
+                                    <div className="px-3 py-2 text-sm text-slate-500">No matching documents</div>
+                                )}
+                            </div>
+                        )}
                         <textarea
+                            ref={inputRef}
                             value={input}
                             onChange={e => {
-                                setInput(e.target.value);
+                                const newValue = e.target.value;
+                                setInput(newValue);
                                 e.target.style.height = 'auto';
                                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                                
+                                // Check for @ mention trigger
+                                const cursorPos = e.target.selectionStart || 0;
+                                const textBeforeCursor = newValue.slice(0, cursorPos);
+                                const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                                
+                                if (lastAtIndex !== -1) {
+                                    const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
+                                    // Only show dropdown if no space after @ (still typing doc name)
+                                    if (!textAfterAt.includes(' ')) {
+                                        setMentionFilter(textAfterAt);
+                                        setMentionCursorPos(lastAtIndex);
+                                        setShowMentionDropdown(true);
+                                    } else {
+                                        setShowMentionDropdown(false);
+                                    }
+                                } else {
+                                    setShowMentionDropdown(false);
+                                }
                             }}
                             onKeyDown={e => {
+                                if (e.key === 'Escape' && showMentionDropdown) {
+                                    e.preventDefault();
+                                    setShowMentionDropdown(false);
+                                    return;
+                                }
                                 if (e.key === 'Enter' && !e.shiftKey) {
+                                    if (showMentionDropdown) {
+                                        e.preventDefault();
+                                        // Select first matching doc
+                                        const firstMatch = documentStore.documents.find(doc => 
+                                            doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())
+                                        );
+                                        if (firstMatch) {
+                                            const beforeAt = input.slice(0, mentionCursorPos);
+                                            const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
+                                            setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`);
+                                            setShowMentionDropdown(false);
+                                            setMentionFilter('');
+                                        }
+                                        return;
+                                    }
                                     e.preventDefault();
                                     handleSend();
                                     // Reset height
                                     const target = e.target as HTMLTextAreaElement;
-                                    target.style.height = 'auto';
+                                    target.style.height = '44px';
                                 }
                             }}
-                            placeholder={isListening ? "Listening..." : "Ask Co-Pilot..."}
-                            className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none min-h-[44px] max-h-[120px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
-                            style={{ height: 'auto' }}
+                            onBlur={() => {
+                                // Delay hiding to allow click on dropdown
+                                setTimeout(() => setShowMentionDropdown(false), 200);
+                            }}
+                            placeholder={isListening ? "Listening..." : "Ask Co-Pilot... (use @ to mention docs)"}
+                            className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
+                            style={{ height: input.trim() ? undefined : '44px', minHeight: '44px', maxHeight: '120px' }}
                             rows={1}
                         />
                         <button
