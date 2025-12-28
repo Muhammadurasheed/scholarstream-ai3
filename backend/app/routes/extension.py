@@ -225,13 +225,21 @@ INSTRUCTIONS:
 2. Map it to the most relevant data from the USER PROFILE or PROJECT CONTEXT.
 3. **CRITICAL**: If a field asks for "Elevator Pitch", "Description", or "Inspiration", use the PROJECT CONTEXT to write a specific, high-quality answer. Do NOT use generic placeholders like "[Problem]". Fill it with actual details from the uploaded doc.
 4. For "Skills" or "Interests", join the list with commas.
-5. For URLs (LinkedIn, GitHub), use the exact URL from the profile.
+5. For URL fields (LinkedIn, GitHub), the VALUE should be the URL, NOT the selector.
+
+**CRITICAL SELECTOR RULES**:
+- The "selector" in your output MUST be the EXACT "selector" value from the FORM FIELDS DETECTED input above.
+- Selectors look like: "#firstName", "[name='email']", "textarea", etc.
+- Selectors are CSS selectors, NOT URLs. Never use a URL as a selector key.
+- If a field has selector "#linkedin", the key should be "#linkedin" and the VALUE should be the URL.
 
 OUTPUT FORMAT:
 Return a valid JSON object containing ONLY the mappings.
+Keys must be CSS selectors from the input. Values are what to fill in those fields.
 {{
     "field_mappings": {{
-        "selector_from_input": "value_to_fill"
+        "#fieldId": "value_to_fill",
+        "[name='email']": "user@example.com"
     }}
 }}
 """
@@ -334,6 +342,10 @@ class ChatRequest(BaseModel):
     query: str
     page_context: Dict[str, Any]
     project_context: Optional[str] = None
+    # FAANG-level KB control: track which docs are explicitly mentioned
+    mentioned_docs: Optional[List[str]] = None  
+    # Toggle: should profile be included in knowledge base?
+    include_profile: bool = True
 
 @router.post("/chat")
 async def copilot_chat(
@@ -341,23 +353,42 @@ async def copilot_chat(
     authorization: Optional[str] = Header(None)
 ):
     """
-    Co-Pilot Chat Endpoint
-    Handles multimodal RAG chat with the extension.
+    Co-Pilot Chat Endpoint V2
+    Handles multimodal RAG chat with FAANG-level knowledge base control.
+    
+    Key Features:
+    - mentioned_docs: Only use explicitly @mentioned documents
+    - include_profile: Toggle to exclude user profile from KB
     """
     user_id = await verify_token(authorization)
     
     try:
-        # Get User Profile
-        profile_response = await get_extension_user_profile(authorization)
-        user_profile = profile_response.get('profile')
-        
         from app.services.copilot_service import copilot_service
+        
+        # FAANG-level KB control: Only fetch profile if include_profile is True
+        user_profile = None
+        if request.include_profile:
+            try:
+                profile_response = await get_extension_user_profile(authorization)
+                user_profile = profile_response.get('profile')
+            except Exception as profile_err:
+                logger.warning("Profile fetch failed, proceeding without profile", error=str(profile_err))
+        
+        logger.info(
+            "Copilot chat with KB controls",
+            user_id=user_id,
+            include_profile=request.include_profile,
+            mentioned_docs=request.mentioned_docs,
+            has_project_context=bool(request.project_context)
+        )
         
         response = await copilot_service.chat(
             query=request.query,
             page_context=request.page_context,
             project_context=request.project_context,
-            user_profile=user_profile
+            user_profile=user_profile,
+            mentioned_docs=request.mentioned_docs,
+            include_profile=request.include_profile
         )
         
         return {

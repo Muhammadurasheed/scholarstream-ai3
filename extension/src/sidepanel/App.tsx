@@ -440,27 +440,29 @@ export default function App() {
             const { docContext, mentionedDocs } = getActiveProjectContext(mentionedNames);
 
             // Build knowledge base based on settings
-            let projectContext: string | null = null;
             let includeProfile = false;
 
             if (mentionedDocs.length > 0) {
                 // Docs were explicitly mentioned - use ONLY those docs
-                projectContext = docContext;
                 // Include profile only if toggle is ON
                 includeProfile = kbSettings.useProfileAsKnowledge;
+                console.log(`[KB] Using ${mentionedDocs.length} mentioned doc(s):`, mentionedDocs.map(d => d.filename));
             } else {
                 // No docs mentioned - auto-include profile (default behavior)
                 includeProfile = kbSettings.autoProfileWhenNoDocs;
+                console.log(`[KB] No docs mentioned. Profile auto-include: ${includeProfile}`);
             }
 
-            // Build the final project_context with profile info if applicable
-            let finalProjectContext = projectContext;
-            if (includeProfile && userProfile) {
-                const profileSection = `--- USER PROFILE (Knowledge Base) ---\n${JSON.stringify(userProfile, null, 2)}`;
-                finalProjectContext = finalProjectContext
-                    ? `${profileSection}\n\n${finalProjectContext}`
-                    : profileSection;
-            }
+            // IMPORTANT: Send ONLY document content as project_context
+            // Backend will handle profile inclusion separately based on include_profile flag
+            const finalProjectContext = docContext;
+
+            console.log(`[KB] Sending to backend:`, {
+                hasDocContext: !!docContext,
+                docContextLength: docContext?.length || 0,
+                mentionedDocNames: mentionedDocs.map(d => d.filename),
+                includeProfile
+            });
 
             const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
