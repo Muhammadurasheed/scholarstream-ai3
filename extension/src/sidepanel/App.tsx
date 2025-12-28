@@ -31,19 +31,19 @@ export default function App() {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [isListening, setIsListening] = useState(false);
-    
+
     // Multi-document state
     const [documentStore, setDocumentStore] = useState<DocumentStore>({ documents: [], activeDocIds: [] });
     const [showDocSelector, setShowDocSelector] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
-    
+
     // Knowledge base settings - FAANG-level control
     const [kbSettings, setKbSettings] = useState<KnowledgeBaseSettings>({
         useProfileAsKnowledge: true,  // Default: include profile
         autoProfileWhenNoDocs: true,  // Auto-include when no docs mentioned
     });
     const [mentionedDocIds, setMentionedDocIds] = useState<string[]>([]); // Tracks @ mentioned docs per message
-    
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -374,25 +374,25 @@ export default function App() {
             // No docs mentioned - return nothing (profile may be used based on toggle)
             return { docContext: null, mentionedDocs: [] };
         }
-        
+
         // Filter to ONLY the explicitly mentioned documents
-        const mentionedDocs = documentStore.documents.filter(d => 
+        const mentionedDocs = documentStore.documents.filter(d =>
             explicitMentions.some(mention => {
                 const mentionLower = mention.toLowerCase();
                 const filenameLower = d.filename.toLowerCase();
                 const nameWithoutExt = d.filename.split('.')[0].toLowerCase();
                 // Match full filename OR name without extension
-                return filenameLower === mentionLower || 
-                       nameWithoutExt === mentionLower ||
-                       filenameLower.includes(mentionLower) ||
-                       nameWithoutExt.includes(mentionLower);
+                return filenameLower === mentionLower ||
+                    nameWithoutExt === mentionLower ||
+                    filenameLower.includes(mentionLower) ||
+                    nameWithoutExt.includes(mentionLower);
             })
         );
-        
+
         if (mentionedDocs.length === 0) {
             return { docContext: null, mentionedDocs: [] };
         }
-        
+
         const docContext = mentionedDocs.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
         return { docContext, mentionedDocs };
     };
@@ -403,11 +403,11 @@ export default function App() {
         const mentionPattern = /@([\w\-_.]+)/g;
         const mentions: string[] = [];
         let match;
-        
+
         while ((match = mentionPattern.exec(text)) !== null) {
             mentions.push(match[1]); // Extract name without @
         }
-        
+
         // Return text with mentions removed for cleaner query
         const cleanQuery = text.replace(/@[\w\-_.]+/g, '').trim();
         return { cleanQuery, mentionedNames: mentions };
@@ -438,11 +438,11 @@ export default function App() {
             // Extract @ mentions and get ONLY those specific documents
             const { cleanQuery, mentionedNames } = parseAndExtractMentions(userMsg.text);
             const { docContext, mentionedDocs } = getActiveProjectContext(mentionedNames);
-            
+
             // Build knowledge base based on settings
             let projectContext: string | null = null;
             let includeProfile = false;
-            
+
             if (mentionedDocs.length > 0) {
                 // Docs were explicitly mentioned - use ONLY those docs
                 projectContext = docContext;
@@ -452,16 +452,16 @@ export default function App() {
                 // No docs mentioned - auto-include profile (default behavior)
                 includeProfile = kbSettings.autoProfileWhenNoDocs;
             }
-            
+
             // Build the final project_context with profile info if applicable
             let finalProjectContext = projectContext;
             if (includeProfile && userProfile) {
                 const profileSection = `--- USER PROFILE (Knowledge Base) ---\n${JSON.stringify(userProfile, null, 2)}`;
-                finalProjectContext = finalProjectContext 
+                finalProjectContext = finalProjectContext
                     ? `${profileSection}\n\n${finalProjectContext}`
                     : profileSection;
             }
-            
+
             const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
                 headers: {
@@ -525,14 +525,14 @@ export default function App() {
                 const allDocsContext = documentStore.documents.length > 0
                     ? documentStore.documents.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n')
                     : null;
-                
+
                 // Build context with profile if available
                 let fullContext = allDocsContext;
                 if (userProfile) {
                     const profileSection = `--- USER PROFILE ---\n${JSON.stringify(userProfile, null, 2)}`;
                     fullContext = fullContext ? `${profileSection}\n\n${fullContext}` : profileSection;
                 }
-                
+
                 const response = await chrome.tabs.sendMessage(tab.id, {
                     type: 'AUTO_FILL_REQUEST',
                     projectContext: fullContext || undefined
@@ -556,16 +556,7 @@ export default function App() {
             setLoading(false);
         }
     };
-        } catch (e) {
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: 'assistant',
-                text: "Could not communicate with the page. Try refreshing the page."
-            }]);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     // Get context status color
     const getContextStatusColor = () => {
@@ -737,14 +728,14 @@ export default function App() {
                                 </div>
                             )}
                         </div>
-                        
+
                         {/* @ Mention hint */}
                         {documentStore.documents.length > 1 && (
                             <div className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-1 rounded mt-1">
                                 💡 Use @filename.ext in chat to reference specific docs
                             </div>
                         )}
-                        
+
                         {/* Profile as Knowledge Base Toggle - FAANG-level control */}
                         {documentStore.documents.length > 0 && (
                             <div className="mt-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
@@ -770,7 +761,7 @@ export default function App() {
                                     </button>
                                 </div>
                                 <p className="text-[9px] text-slate-500 mt-1">
-                                    {kbSettings.useProfileAsKnowledge 
+                                    {kbSettings.useProfileAsKnowledge
                                         ? "✅ Your profile info will be used alongside @mentioned docs"
                                         : "📄 Only @mentioned documents will be used as knowledge base"
                                     }
@@ -860,7 +851,7 @@ export default function App() {
                             {/* Render @mentions as highlighted tags in user messages */}
                             {msg.role === 'user' ? (
                                 <p className="text-sm whitespace-pre-wrap">
-                                    {msg.text.split(/(@[\w\-_.]+)/g).map((part, i) => 
+                                    {msg.text.split(/(@[\w\-_.]+)/g).map((part, i) =>
                                         part.startsWith('@') ? (
                                             <span key={i} className="inline-flex items-center bg-white/20 text-white px-1.5 py-0.5 rounded text-xs font-medium mx-0.5">
                                                 <FileText className="w-3 h-3 mr-1" />
@@ -976,12 +967,12 @@ export default function App() {
                                 setInput(newValue);
                                 e.target.style.height = 'auto';
                                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                                
+
                                 // Check for @ mention trigger
                                 const cursorPos = e.target.selectionStart || 0;
                                 const textBeforeCursor = newValue.slice(0, cursorPos);
                                 const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-                                
+
                                 if (lastAtIndex !== -1) {
                                     const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
                                     // Only show dropdown if no space after @ (still typing doc name)
@@ -1006,7 +997,7 @@ export default function App() {
                                 if (showMentionDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab')) {
                                     e.preventDefault();
                                     // For simplicity, Tab/Enter selects first match
-                                    const firstMatch = documentStore.documents.find(doc => 
+                                    const firstMatch = documentStore.documents.find(doc =>
                                         doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())
                                     );
                                     if (firstMatch && (e.key === 'Tab')) {
@@ -1022,7 +1013,7 @@ export default function App() {
                                     if (showMentionDropdown) {
                                         e.preventDefault();
                                         // Select first matching doc
-                                        const firstMatch = documentStore.documents.find(doc => 
+                                        const firstMatch = documentStore.documents.find(doc =>
                                             doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())
                                         );
                                         if (firstMatch) {
