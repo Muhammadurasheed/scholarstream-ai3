@@ -1279,16 +1279,31 @@ async function handleAutoFill(projectContext?: string) {
 
         let filledCount = 0;
         for (const [selector, value] of Object.entries(fieldMappings)) {
-            const el = document.querySelector(selector) as HTMLInputElement;
-            if (el && value) {
-                if (el.type === 'file') continue;
+            // CRITICAL FIX: Validate selector before using querySelector
+            // The AI sometimes returns URLs or invalid strings as "selectors"
+            if (!selector || 
+                selector.startsWith('http') || 
+                selector.startsWith('www.') ||
+                selector.includes('://') ||
+                (!selector.startsWith('#') && !selector.startsWith('.') && !selector.startsWith('[') && !selector.match(/^[a-zA-Z]/))) {
+                console.warn(`[Auto-Fill] Invalid selector skipped: "${selector}"`);
+                continue;
+            }
 
-                el.value = String(value);
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-                filledCount++;
-                el.style.border = "2px solid #22c55e";
-                el.style.backgroundColor = "#f0fdf4";
+            try {
+                const el = document.querySelector(selector) as HTMLInputElement;
+                if (el && value) {
+                    if (el.type === 'file') continue;
+
+                    el.value = String(value);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    filledCount++;
+                    el.style.border = "2px solid #22c55e";
+                    el.style.backgroundColor = "#f0fdf4";
+                }
+            } catch (selectorError) {
+                console.warn(`[Auto-Fill] querySelector failed for "${selector}":`, selectorError);
             }
         }
 

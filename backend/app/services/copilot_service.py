@@ -153,20 +153,49 @@ class CopilotService:
         # V2: Build knowledge base section based on what's provided
         has_project_docs = project_context and len(project_context.strip()) > 50
         
-        # Build document context info
+        # Log KB state for debugging
+        logger.info(
+            "Copilot chat KB state",
+            has_project_docs=has_project_docs,
+            project_context_length=len(project_context) if project_context else 0,
+            mentioned_docs=mentioned_docs,
+            include_profile=include_profile,
+            has_user_profile=bool(user_profile)
+        )
+        
+        # Build document context info with EMPHASIS
         doc_section = ""
         if has_project_docs:
             if mentioned_docs and len(mentioned_docs) > 0:
-                doc_section = f"""✅ EXPLICITLY MENTIONED DOCUMENTS ({len(mentioned_docs)} docs):
-{', '.join(mentioned_docs)}
+                doc_section = f"""✅ **EXPLICITLY MENTIONED DOCUMENTS** ({len(mentioned_docs)} docs): {', '.join(mentioned_docs)}
 
-DOCUMENT CONTENT (Use this to answer the user's question):
-{project_context}"""
+⚠️ CRITICAL: YOU MUST USE THIS DOCUMENT CONTENT BELOW TO ANSWER THE USER'S QUESTION.
+DO NOT MAKE UP INFORMATION. USE THE ACTUAL CONTENT PROVIDED HERE:
+
+=== BEGIN DOCUMENT CONTENT ===
+{project_context}
+=== END DOCUMENT CONTENT ===
+
+If the user is asking you to fill a field or help with an application, extract specific details 
+from the document content above (names, skills, experiences, projects) and use them verbatim."""
             else:
-                doc_section = f"""✅ DOCUMENTS AVAILABLE:
-{project_context}"""
+                doc_section = f"""✅ DOCUMENTS AVAILABLE (Use this content):
+
+=== BEGIN DOCUMENT CONTENT ===
+{project_context}
+=== END DOCUMENT CONTENT ==="""
         else:
             doc_section = "❌ No documents provided. Suggest user upload their resume/project README using the + button."
+        
+        # Build profile section
+        profile_section = ""
+        if include_profile and user_profile:
+            profile_section = f"""✅ USER PROFILE (INCLUDED - use this information):
+{json.dumps(user_profile, indent=2)}"""
+        elif include_profile and not user_profile:
+            profile_section = "⚠️ Profile was requested but not available."
+        else:
+            profile_section = "❌ USER PROFILE (EXCLUDED by user preference) - DO NOT use any profile data. Only use document content."
         
         prompt = f"""
 You are the ScholarStream Co-Pilot V2: **{platform_persona['name']}**
@@ -175,8 +204,7 @@ You are an elite AI agent with deep expertise in: {platform_persona.get('experti
 
 === KNOWLEDGE BASE (STRICTLY USE ONLY WHAT'S PROVIDED) ===
 
-1️⃣ USER PROFILE {'(INCLUDED)' if include_profile else '(EXCLUDED by user preference)'}:
-{json.dumps(user_profile, indent=2) if (user_profile and include_profile) else "Profile not included in this query. Use only document content."}
+1️⃣ {profile_section}
 
 2️⃣ PROJECT DOCUMENTS:
 {doc_section}
@@ -195,19 +223,21 @@ You are an elite AI agent with deep expertise in: {platform_persona.get('experti
 
 === YOUR TASK ===
 1. **Analyze** the user's query in context of the provided knowledge base
-2. **Use ONLY provided context**: If profile is excluded, do NOT infer profile data
-3. **Determine Intent**:
+2. **Use ONLY provided context**: If documents were provided, you MUST extract specific information from them.
+3. **DO NOT HALLUCINATE**: Never make up names, skills, or experiences. Use exactly what's in the documents.
+4. **If profile is excluded, do NOT infer profile data** - only use document content
+5. **Determine Intent**:
    - Q&A: Answer questions about the opportunity/platform
-   - DRAFTING: Write essays, cover letters, short answers using the provided knowledge
+   - DRAFTING: Write essays, cover letters, short answers using the PROVIDED document content
    - COACHING: Provide strategic advice for winning this specific type of opportunity
    - FILLING: Generate field auto-fill actions when explicitly requested
-4. **Personalize**: Reference specific details from the provided documents and profile (if included)
-5. **Platform Expertise**: Apply your specialized knowledge of this platform's judging criteria
+6. **Personalize**: Reference SPECIFIC details from the provided documents (if any)
+7. **Platform Expertise**: Apply your specialized knowledge of this platform's judging criteria
 
 === OUTPUT FORMAT (JSON ONLY) ===
 {{
-  "thought_process": "Brief internal reasoning",
-  "message": "Your response to the user. Be helpful, specific, and actionable.",
+  "thought_process": "Brief internal reasoning about which document/profile data you're using",
+  "message": "Your response to the user. Be helpful, specific, and actionable. Reference specific info from documents.",
   "action": {{
     "type": "fill_field",
     "selector": "css_selector",
