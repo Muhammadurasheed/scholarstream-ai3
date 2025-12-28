@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw, Plus, AtSign, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, Upload, Sparkles, User, Bot, Mic, MicOff, FileText, LogIn, AlertCircle, CheckCircle2, Circle, Globe, X, Loader2, RefreshCw, Plus, AtSign, Trash2, ChevronDown, ChevronUp, ToggleLeft, ToggleRight } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
@@ -18,6 +18,12 @@ interface DocumentStore {
     activeDocIds: string[]; // Selected via @ mention
 }
 
+// Knowledge base settings
+interface KnowledgeBaseSettings {
+    useProfileAsKnowledge: boolean;  // Toggle for profile inclusion
+    autoProfileWhenNoDocs: boolean;  // Auto-include profile when no docs mentioned
+}
+
 export default function App() {
     const [messages, setMessages] = useState<Message[]>([
         { id: '1', role: 'assistant', text: 'Hello! I am your ScholarStream Co-Pilot. I can help you apply for this opportunity.\n\n**Tips to get started:**\n- Upload documents using the + button\n- Use **@docname** to reference specific docs\n- Click the ✨ sparkle on any field for AI assistance' }
@@ -30,6 +36,13 @@ export default function App() {
     const [documentStore, setDocumentStore] = useState<DocumentStore>({ documents: [], activeDocIds: [] });
     const [showDocSelector, setShowDocSelector] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
+    
+    // Knowledge base settings - FAANG-level control
+    const [kbSettings, setKbSettings] = useState<KnowledgeBaseSettings>({
+        useProfileAsKnowledge: true,  // Default: include profile
+        autoProfileWhenNoDocs: true,  // Auto-include when no docs mentioned
+    });
+    const [mentionedDocIds, setMentionedDocIds] = useState<string[]>([]); // Tracks @ mentioned docs per message
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,9 +78,9 @@ export default function App() {
 
     useEffect(scrollToBottom, [messages]);
 
-    // Check for existing token, profile and documents on mount
+    // Check for existing token, profile, documents, and KB settings on mount
     useEffect(() => {
-        chrome.storage.local.get(['authToken', 'userProfile', 'documentStore'], (result) => {
+        chrome.storage.local.get(['authToken', 'userProfile', 'documentStore', 'kbSettings'], (result) => {
             if (result.authToken) {
                 setAuthToken(result.authToken);
             }
@@ -89,6 +102,10 @@ export default function App() {
                     documentName: store.documents.length > 0 ? `${store.documents.length} docs` : null,
                     documentCharCount: totalChars,
                 }));
+            }
+            // Load KB settings
+            if (result.kbSettings) {
+                setKbSettings(result.kbSettings as KnowledgeBaseSettings);
             }
         });
 
@@ -319,7 +336,7 @@ export default function App() {
         setMessages(prev => [...prev, {
             id: Date.now().toString(),
             role: 'assistant',
-            text: `✅ Added **${file.name}** (${charCount.toLocaleString()} chars) to your knowledge base.\n\nUse **@${file.name.split('.')[0]}** in chat to reference it, or it will be used automatically.`
+            text: `✅ Added **${file.name}** (${charCount.toLocaleString()} chars) to your knowledge base.\n\n📎 Use **@${file.name}** in chat to reference it specifically.\n\n${documentStore.documents.length > 0 ? '💡 When you use @mentions, **only those docs** will be used as knowledge. Toggle "Include Profile in KB" to also use your profile info.' : ''}`
         }]);
 
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -350,40 +367,50 @@ export default function App() {
         }]);
     };
 
-    // Get combined project context from active documents
-    const getActiveProjectContext = (): string | null => {
-        const activeDocs = documentStore.documents.filter(d => documentStore.activeDocIds.includes(d.id));
-        if (activeDocs.length === 0) {
-            // If no specific docs selected, use all
-            if (documentStore.documents.length > 0) {
-                return documentStore.documents.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
-            }
-            return null;
+    // Get combined project context from ONLY explicitly mentioned documents
+    // This is FAANG-level strict: only @mentioned docs are used, others are ignored
+    const getActiveProjectContext = (explicitMentions: string[]): { docContext: string | null; mentionedDocs: UploadedDocument[] } => {
+        if (explicitMentions.length === 0) {
+            // No docs mentioned - return nothing (profile may be used based on toggle)
+            return { docContext: null, mentionedDocs: [] };
         }
-        return activeDocs.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
+        
+        // Filter to ONLY the explicitly mentioned documents
+        const mentionedDocs = documentStore.documents.filter(d => 
+            explicitMentions.some(mention => {
+                const mentionLower = mention.toLowerCase();
+                const filenameLower = d.filename.toLowerCase();
+                const nameWithoutExt = d.filename.split('.')[0].toLowerCase();
+                // Match full filename OR name without extension
+                return filenameLower === mentionLower || 
+                       nameWithoutExt === mentionLower ||
+                       filenameLower.includes(mentionLower) ||
+                       nameWithoutExt.includes(mentionLower);
+            })
+        );
+        
+        if (mentionedDocs.length === 0) {
+            return { docContext: null, mentionedDocs: [] };
+        }
+        
+        const docContext = mentionedDocs.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n');
+        return { docContext, mentionedDocs };
     };
 
-    // Parse @ mentions from input and update active docs
-    const parseAndActivateMentions = (text: string): string => {
-        const mentionPattern = /@(\S+)/g;
-        const mentions = text.match(mentionPattern) || [];
+    // Parse @ mentions from input - FAANG-level extraction
+    // Returns: { cleanQuery: string, mentionedNames: string[] }
+    const parseAndExtractMentions = (text: string): { cleanQuery: string; mentionedNames: string[] } => {
+        const mentionPattern = /@([\w\-_.]+)/g;
+        const mentions: string[] = [];
+        let match;
         
-        if (mentions.length > 0) {
-            const mentionedNames = mentions.map(m => m.slice(1).toLowerCase());
-            const matchedDocs = documentStore.documents.filter(d => 
-                mentionedNames.some(name => d.filename.toLowerCase().includes(name))
-            );
-            
-            if (matchedDocs.length > 0) {
-                setDocumentStore(prev => ({
-                    ...prev,
-                    activeDocIds: matchedDocs.map(d => d.id)
-                }));
-            }
+        while ((match = mentionPattern.exec(text)) !== null) {
+            mentions.push(match[1]); // Extract name without @
         }
         
         // Return text with mentions removed for cleaner query
-        return text.replace(mentionPattern, '').trim();
+        const cleanQuery = text.replace(/@[\w\-_.]+/g, '').trim();
+        return { cleanQuery, mentionedNames: mentions };
     };
 
     const handleSend = async () => {
@@ -407,9 +434,33 @@ export default function App() {
                 console.warn("Could not get page context:", e);
             }
 
-            // 2. Call Backend API with active document context
-            const cleanQuery = parseAndActivateMentions(userMsg.text);
-            const projectContext = getActiveProjectContext();
+            // 2. FAANG-level Knowledge Base Resolution
+            // Extract @ mentions and get ONLY those specific documents
+            const { cleanQuery, mentionedNames } = parseAndExtractMentions(userMsg.text);
+            const { docContext, mentionedDocs } = getActiveProjectContext(mentionedNames);
+            
+            // Build knowledge base based on settings
+            let projectContext: string | null = null;
+            let includeProfile = false;
+            
+            if (mentionedDocs.length > 0) {
+                // Docs were explicitly mentioned - use ONLY those docs
+                projectContext = docContext;
+                // Include profile only if toggle is ON
+                includeProfile = kbSettings.useProfileAsKnowledge;
+            } else {
+                // No docs mentioned - auto-include profile (default behavior)
+                includeProfile = kbSettings.autoProfileWhenNoDocs;
+            }
+            
+            // Build the final project_context with profile info if applicable
+            let finalProjectContext = projectContext;
+            if (includeProfile && userProfile) {
+                const profileSection = `--- USER PROFILE (Knowledge Base) ---\n${JSON.stringify(userProfile, null, 2)}`;
+                finalProjectContext = finalProjectContext 
+                    ? `${profileSection}\n\n${finalProjectContext}`
+                    : profileSection;
+            }
             
             const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
@@ -420,7 +471,9 @@ export default function App() {
                 body: JSON.stringify({
                     query: cleanQuery,
                     page_context: context,
-                    project_context: projectContext
+                    project_context: finalProjectContext,
+                    mentioned_docs: mentionedDocs.map(d => d.filename),
+                    include_profile: includeProfile
                 })
             });
 
@@ -468,22 +521,41 @@ export default function App() {
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (tab?.id) {
-                // Get combined project context from all documents
-                const projectContext = getActiveProjectContext();
+                // For auto-fill, use ALL documents (no @ mention filtering) + profile
+                const allDocsContext = documentStore.documents.length > 0
+                    ? documentStore.documents.map(d => `--- ${d.filename} ---\n${d.content}`).join('\n\n')
+                    : null;
+                
+                // Build context with profile if available
+                let fullContext = allDocsContext;
+                if (userProfile) {
+                    const profileSection = `--- USER PROFILE ---\n${JSON.stringify(userProfile, null, 2)}`;
+                    fullContext = fullContext ? `${profileSection}\n\n${fullContext}` : profileSection;
+                }
                 
                 const response = await chrome.tabs.sendMessage(tab.id, {
                     type: 'AUTO_FILL_REQUEST',
-                    projectContext: projectContext || undefined
+                    projectContext: fullContext || undefined
                 });
 
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),
                     role: 'assistant',
                     text: response.success
-                        ? `✨ Magic! Auto-filled ${response.filled} fields based on your profile.`
+                        ? `✨ Magic! Auto-filled ${response.filled} fields based on your profile${documentStore.documents.length > 0 ? ` and ${documentStore.documents.length} doc(s)` : ''}.`
                         : `❌ Auto-fill failed: ${response.message || response.error}`
                 }]);
             }
+        } catch (e) {
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'assistant',
+                text: "Could not communicate with the page. Try refreshing the page."
+            }]);
+        } finally {
+            setLoading(false);
+        }
+    };
         } catch (e) {
             setMessages(prev => [...prev, {
                 id: Date.now().toString(),
@@ -669,7 +741,40 @@ export default function App() {
                         {/* @ Mention hint */}
                         {documentStore.documents.length > 1 && (
                             <div className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-1 rounded mt-1">
-                                💡 Use @filename in chat to reference specific docs
+                                💡 Use @filename.ext in chat to reference specific docs
+                            </div>
+                        )}
+                        
+                        {/* Profile as Knowledge Base Toggle - FAANG-level control */}
+                        {documentStore.documents.length > 0 && (
+                            <div className="mt-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <User className="w-3.5 h-3.5 text-purple-400" />
+                                        <span className="text-[11px] text-slate-300">Include Profile in KB</span>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const newSettings = { ...kbSettings, useProfileAsKnowledge: !kbSettings.useProfileAsKnowledge };
+                                            setKbSettings(newSettings);
+                                            chrome.storage.local.set({ kbSettings: newSettings }); // Persist
+                                        }}
+                                        className="focus:outline-none"
+                                        title={kbSettings.useProfileAsKnowledge ? "Profile will be used as knowledge base alongside mentioned docs" : "Only mentioned docs will be used"}
+                                    >
+                                        {kbSettings.useProfileAsKnowledge ? (
+                                            <ToggleRight className="w-6 h-6 text-purple-400" />
+                                        ) : (
+                                            <ToggleLeft className="w-6 h-6 text-slate-500" />
+                                        )}
+                                    </button>
+                                </div>
+                                <p className="text-[9px] text-slate-500 mt-1">
+                                    {kbSettings.useProfileAsKnowledge 
+                                        ? "✅ Your profile info will be used alongside @mentioned docs"
+                                        : "📄 Only @mentioned documents will be used as knowledge base"
+                                    }
+                                </p>
                             </div>
                         )}
 
@@ -836,10 +941,10 @@ export default function App() {
                                             onMouseDown={(e) => {
                                                 e.preventDefault(); // Prevent blur before click registers
                                                 e.stopPropagation();
-                                                // Insert doc as a highlighted tag-style mention
+                                                // Insert doc with FULL filename including extension (FAANG standard)
                                                 const beforeAt = input.slice(0, mentionCursorPos);
                                                 const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
-                                                const docRef = `@${doc.filename.split('.')[0]}`;
+                                                const docRef = `@${doc.filename}`; // Full filename with extension
                                                 const newInput = `${beforeAt}${docRef} ${afterMention}`.trim();
                                                 setInput(newInput);
                                                 setShowMentionDropdown(false);
@@ -907,7 +1012,7 @@ export default function App() {
                                     if (firstMatch && (e.key === 'Tab')) {
                                         const beforeAt = input.slice(0, mentionCursorPos);
                                         const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
-                                        setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`.trim());
+                                        setInput(`${beforeAt}@${firstMatch.filename} ${afterMention}`.trim()); // Full filename
                                         setShowMentionDropdown(false);
                                         setMentionFilter('');
                                     }
@@ -923,7 +1028,7 @@ export default function App() {
                                         if (firstMatch) {
                                             const beforeAt = input.slice(0, mentionCursorPos);
                                             const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
-                                            setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`.trim());
+                                            setInput(`${beforeAt}@${firstMatch.filename} ${afterMention}`.trim()); // Full filename
                                             setShowMentionDropdown(false);
                                             setMentionFilter('');
                                         }
