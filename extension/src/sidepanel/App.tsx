@@ -543,10 +543,10 @@ export default function App() {
                     <div className={`w-2 h-2 rounded-full ${getContextStatusColor()} animate-pulse`} />
                     <Sparkles className="w-5 h-5 text-blue-500" />
                     <div className="flex flex-col">
-                        <h1 className="font-bold text-sm leading-none">
-                            {userProfile?.name || 'Co-Pilot'}
+                        <h1 className="font-bold text-sm leading-none truncate max-w-[120px]">
+                            {userProfile?.name || userProfile?.full_name || 'Co-Pilot'}
                         </h1>
-                        <span className="text-[10px] text-slate-400 leading-none">
+                        <span className="text-[10px] text-slate-400 leading-none truncate max-w-[120px]">
                             {userProfile?.email || 'ScholarStream'}
                         </span>
                     </div>
@@ -794,7 +794,7 @@ export default function App() {
                                 }
                             }}
                             placeholder={isListening ? "Listening..." : "Ask Co-Pilot..."}
-                            className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none overflow-hidden min-h-[44px] ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
+                            className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none min-h-[44px] max-h-[120px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
                             style={{ height: 'auto' }}
                             rows={1}
                         />

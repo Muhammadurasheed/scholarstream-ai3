@@ -236,60 +236,115 @@ You are an elite AI agent with deep expertise in: {platform_persona.get('experti
         target_field: Dict[str, Any], 
         user_profile: Dict[str, Any], 
         instruction: Optional[str] = None,
-        page_url: Optional[str] = None
+        page_url: Optional[str] = None,
+        project_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Sparkle V2 / Focus Fill Handler - Now with platform awareness.
+        Sparkle V3 / Focus Fill Handler - Now with full TRI-FOLD knowledge base.
         Generates content for a SINGLE specific field with high precision.
+        
+        TRI-FOLD KNOWLEDGE:
+        1. User Profile (skills, background, experience)
+        2. Project Context (uploaded document)
+        3. Field Context (what the field needs)
         """
         platform_persona = self._detect_platform(page_url or '')
+        
+        # Extract field constraints
+        char_limit = target_field.get('characterLimit')
+        word_limit = target_field.get('wordLimit')
+        field_format = target_field.get('format', 'plain')
+        field_category = target_field.get('fieldCategory', 'generic')
+        
+        # Build constraint instructions
+        constraints = []
+        if char_limit:
+            constraints.append(f"⚠️ HARD LIMIT: Response MUST be under {char_limit} characters. Count carefully!")
+        if word_limit:
+            constraints.append(f"📝 Aim for approximately {word_limit} words.")
+        if field_format == 'markdown':
+            constraints.append("📑 Format: Use markdown (bold, lists) for better readability.")
+        
+        constraint_text = "\n".join(constraints) if constraints else "No specific length constraints."
         
         prompt = f"""
 You are the "{platform_persona['name']}" Sparkle Engine for ScholarStream.
 A student needs help filling a specific form field on {platform_persona['name']}.
 
-USER PROFILE:
-{json.dumps(user_profile, indent=2)}
+=== TRI-FOLD KNOWLEDGE BASE ===
 
-TARGET FIELD INFO:
+1️⃣ USER PROFILE (Who they are):
+{json.dumps(user_profile, indent=2) if user_profile else "Not provided - use generic professional tone"}
+
+2️⃣ PROJECT CONTEXT (What they're working on):
+{project_context[:20000] if project_context else "No project document uploaded. Generate helpful content based on profile."}
+
+3️⃣ FIELD CONTEXT (What to fill):
+- Field Type: {field_category.replace('_', ' ').title()}
 - Label: {target_field.get('label')}
 - Name/ID: {target_field.get('name')} / {target_field.get('id')}
 - Placeholder: {target_field.get('placeholder')}
-- Type: {target_field.get('type')}
-- Surrounding Text: {target_field.get('surroundingText', '')}
+- Input Type: {target_field.get('type')}
+- Platform: {platform_persona['name']}
+- Surrounding Context: {target_field.get('surroundingContext', target_field.get('surroundingText', ''))}
 
-USER INSTRUCTION: {instruction or "Fill this based on my profile."}
+=== CONSTRAINTS ===
+{constraint_text}
 
-PLATFORM CONTEXT: This is for {platform_persona['name']}. Apply these tips:
+=== ADDITIONAL INSTRUCTIONS ===
+{instruction or "Fill this field with compelling, relevant content based on the knowledge base above."}
+
+=== PLATFORM TIPS ===
 {chr(10).join(f"• {tip}" for tip in platform_persona.get('tips', [])[:2])}
 
-TASK:
-1. Analyze what this field needs based on label, placeholder, and surrounding context
-2. Draft perfect content using the user's profile data
-3. Tailor the tone and content to what {platform_persona['name']} judges/reviewers expect
+=== YOUR TASK ===
+1. Analyze what this "{field_category}" field needs based on all available context
+2. Draft HIGH-QUALITY content using SPECIFIC details from the user's profile AND project context
+3. Do NOT use generic placeholders like [YOUR PROJECT] - use actual information from the provided context
+4. Match the tone and expectations of {platform_persona['name']} reviewers/judges
+5. RESPECT character/word limits strictly if specified
 
-OUTPUT JSON:
+OUTPUT JSON (no markdown code blocks):
 {{
-  "content": "The actual text to fill in the box (ready to paste)",
-  "reasoning": "Brief explanation of your approach"
+  "content": "The actual text to fill in the field - ready to paste, professional quality",
+  "reasoning": "Brief explanation of how you used the profile and project context"
 }}
 """
         try:
             result = await ai_service.generate_content_async(prompt)
             
-            # Simple cleanup for JSON
+            # Robust JSON cleanup
             cleaned = result.strip()
             if cleaned.startswith('```json'): cleaned = cleaned[7:]
             if cleaned.startswith('```'): cleaned = cleaned[3:]
             if cleaned.endswith('```'): cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
             
-            data = json.loads(cleaned.strip())
+            data = json.loads(cleaned)
+            
+            # Enforce character limit if specified
+            content = data.get('content', '')
+            if char_limit and len(content) > char_limit:
+                # Truncate intelligently at word boundary
+                truncated = content[:char_limit-3].rsplit(' ', 1)[0] + '...'
+                data['content'] = truncated
+                data['reasoning'] += f" (Truncated from {len(content)} to {len(truncated)} chars)"
+                logger.info("Sparkle content truncated to meet char limit", 
+                           original=len(content), truncated=len(truncated), limit=char_limit)
+            
             return data
+        except json.JSONDecodeError as e:
+            logger.error("Sparkle JSON parse failed", error=str(e), raw=result[:200] if result else "None")
+            # Return raw text as fallback
+            return {
+                "content": result.strip()[:1000] if result else "",
+                "reasoning": "Generated content (JSON parse failed, showing raw output)"
+            }
         except Exception as e:
             logger.error("Sparkle generation failed", error=str(e))
             return {
                 "content": "",
-                "reasoning": "I had a brain freeze. Please type manually for now."
+                "reasoning": f"Generation failed: {str(e)[:100]}"
             }
 
 
