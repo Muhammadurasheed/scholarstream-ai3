@@ -77,13 +77,15 @@ const Login = () => {
   const handleGoogleSignIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
+      // The AuthContext listener will handle state updates and redirection
+      // via the useEffect above once the user profile is fully loaded.
       await signInWithPopup(auth, provider);
       toast({
         title: 'Welcome back!',
         description: 'Successfully logged in',
       });
-      const destination = isOnboardingComplete() ? '/dashboard' : '/onboarding';
-      navigate(destination);
+      // Do NOT navigate here. Let the useEffect handle it to ensure
+      // localStorage (onboarding status) is synced first.
     } catch (error: any) {
       toast({
         title: 'Error',

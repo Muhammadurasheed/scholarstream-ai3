@@ -3,8 +3,8 @@ console.log("ScholarStream Content Script Loaded");
 import { getPageContext } from '../utils/domScanner';
 
 // API Configuration - matches extension config
-const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__' 
-    ? '__VITE_API_URL__' 
+const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__'
+    ? '__VITE_API_URL__'
     : 'http://localhost:8081';
 
 const ENDPOINTS = {
@@ -20,7 +20,7 @@ interface FieldContext {
     placeholder: string;
     type: string;
     selector: string;
-    
+
     // Enhanced (Phase 3)
     characterLimit?: number;
     wordLimit?: number;
@@ -29,19 +29,19 @@ interface FieldContext {
     surroundingContext: string;
     platformHint: string;
     fieldCategory: FieldCategory;
-    
+
     // Page context
     pageTitle: string;
     pageUrl: string;
 }
 
-type FieldCategory = 
-    | 'elevator_pitch' 
-    | 'description' 
-    | 'inspiration' 
-    | 'technical' 
-    | 'challenges' 
-    | 'team' 
+type FieldCategory =
+    | 'elevator_pitch'
+    | 'description'
+    | 'inspiration'
+    | 'technical'
+    | 'challenges'
+    | 'team'
     | 'personal_info'
     | 'links'
     | 'generic';
@@ -372,8 +372,8 @@ class FocusEngine {
 
     // ========== ENHANCED THOUGHT BUBBLE (Phase 3) ==========
     private showEnhancedReasoning(
-        reasoning: string, 
-        target: HTMLElement, 
+        reasoning: string,
+        target: HTMLElement,
         fieldContext: FieldContext,
         wasTemplateUsed: boolean
     ) {
@@ -389,7 +389,7 @@ class FocusEngine {
 
         // Build thought bubble content
         let content = `<div style="margin-bottom: 8px;"><span style="color: #4ECDC4; font-weight: 600;">🧠 AI Thought:</span> ${reasoning}</div>`;
-        
+
         // Add character/word limit info if applicable
         if (fieldContext.characterLimit) {
             content += `<div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">📏 Character limit: ${fieldContext.characterLimit}</div>`;
@@ -579,7 +579,7 @@ class FocusEngine {
 
     private detectWordLimit(target: HTMLElement, label: string): number | undefined {
         const combinedText = label.toLowerCase();
-        
+
         // Common patterns: "300 words", "max 500 words", "word limit: 250"
         const wordMatch = combinedText.match(/(\d+)\s*words?/i);
         if (wordMatch) {
@@ -672,7 +672,7 @@ class FocusEngine {
 
     private categorizeFieldEnhanced(label: string, placeholder: string, context: string): FieldCategory {
         const text = (label + ' ' + placeholder + ' ' + context).toLowerCase();
-        
+
         if (text.includes('elevator') || text.includes('pitch') || text.includes('tagline')) return 'elevator_pitch';
         if (text.includes('description') || text.includes('about') || text.includes('overview')) return 'description';
         if (text.includes('inspiration') || text.includes('why') || text.includes('motivation') || text.includes('what inspired')) return 'inspiration';
@@ -681,7 +681,7 @@ class FocusEngine {
         if (text.includes('team') || text.includes('member') || text.includes('collaborat')) return 'team';
         if (text.includes('name') || text.includes('email') || text.includes('phone') || text.includes('linkedin') || text.includes('github')) return 'personal_info';
         if (text.includes('url') || text.includes('link') || text.includes('demo') || text.includes('video') || text.includes('repo')) return 'links';
-        
+
         return 'generic';
     }
 
@@ -732,7 +732,7 @@ class FocusEngine {
             if (content) {
                 // Show enhanced reasoning with tips
                 this.showEnhancedReasoning(reasoning, target, fieldContext, wasTemplateUsed);
-                
+
                 // Typewriter effect
                 await this.typewriterEffect(target, content);
             }
@@ -821,19 +821,24 @@ async function generateFieldContentEnhanced(
     }
 
     // Build enhanced instruction based on field analysis
-    let instruction = `Fill this ${fieldContext.fieldCategory.replace('_', ' ')} field.`;
-    
+    let instruction = `You are a professional application writer. TASK: Fill the "${fieldContext.fieldCategory.replace('_', ' ')}" field for this form.\n\n`;
+
+    instruction += `CRITICAL INSTRUCTIONS:\n`;
+    instruction += `1. You MUST use the information from the provided "User Profile" and "Project Context" (Blueprint).\n`;
+    instruction += `2. Do NOT hallucinate details. If context is missing, use the profile to infer reasonable professional details.\n`;
+    instruction += `3. Adapt your tone to be persuasive and professional.\n`;
+
     if (fieldContext.characterLimit) {
-        instruction += ` Keep under ${fieldContext.characterLimit} characters.`;
+        instruction += `\nCONSTRAINT: STRICTLY limit your response to UNDER ${fieldContext.characterLimit} characters. This is a HARD limit.\n`;
     }
     if (fieldContext.wordLimit) {
-        instruction += ` Aim for approximately ${fieldContext.wordLimit} words.`;
+        instruction += `\nCONSTRAINT: Aim for approximately ${fieldContext.wordLimit} words.\n`;
     }
     if (fieldContext.format === 'markdown') {
-        instruction += ` Use markdown formatting for emphasis and structure.`;
+        instruction += `\nFORMAT: Use markdown formatting (bolding, lists) for readability.\n`;
     }
     if (fieldContext.surroundingContext) {
-        instruction += ` Context: ${fieldContext.surroundingContext}`;
+        instruction += `\nPAGE CONTEXT: ${fieldContext.surroundingContext}\n`;
     }
 
     // Request template if no context available

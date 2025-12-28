@@ -542,7 +542,14 @@ export default function App() {
                 <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${getContextStatusColor()} animate-pulse`} />
                     <Sparkles className="w-5 h-5 text-blue-500" />
-                    <h1 className="font-bold text-lg">Co-Pilot</h1>
+                    <div className="flex flex-col">
+                        <h1 className="font-bold text-sm leading-none">
+                            {userProfile?.name || 'Co-Pilot'}
+                        </h1>
+                        <span className="text-[10px] text-slate-400 leading-none">
+                            {userProfile?.email || 'ScholarStream'}
+                        </span>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
@@ -666,7 +673,7 @@ export default function App() {
                             {contextStatus.hasDocument ? 'Replace Doc' : 'Upload Doc'}
                         </button>
                         <button
-                            onClick={() => window.open('https://scholarstream.lovable.app/profile', '_blank')}
+                            onClick={() => window.open('http://localhost:8080/profile', '_blank')}
                             className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-2 rounded border border-slate-700 flex items-center justify-center gap-1"
                         >
                             <User className="w-3 h-3" />
@@ -770,13 +777,26 @@ export default function App() {
                     </button>
 
                     <div className="relative flex-1">
-                        <input
-                            type="text"
+                        <textarea
                             value={input}
-                            onChange={e => setInput(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleSend()}
+                            onChange={e => {
+                                setInput(e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                            }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend();
+                                    // Reset height
+                                    const target = e.target as HTMLTextAreaElement;
+                                    target.style.height = 'auto';
+                                }
+                            }}
                             placeholder={isListening ? "Listening..." : "Ask Co-Pilot..."}
-                            className={`w-full bg-slate-800 border-none rounded-full py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
+                            className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none overflow-hidden min-h-[44px] ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}
+                            style={{ height: 'auto' }}
+                            rows={1}
                         />
                         <button
                             onClick={toggleVoice}
