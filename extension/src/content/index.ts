@@ -74,7 +74,28 @@ const PLATFORM_TIPS: Record<string, string[]> = {
     ]
 };
 
-// ===== REAL AUTH: Extract token from ScholarStream web app =====
+// ===== UNIFIED AUTH SYNC: Listen for custom events from ScholarStream web app =====
+// This is the Google-style zero-config approach (no extension ID needed)
+window.addEventListener('scholarstream-auth-sync', ((event: CustomEvent) => {
+    const { token, user } = event.detail || {};
+    if (!token) return;
+
+    console.log('🔑 [EXT] Auth sync event received from web app!');
+
+    chrome.storage.local.set({ 
+        authToken: token,
+        userProfile: user || {}
+    }, () => {
+        console.log('✅ [EXT] Auth synced to extension storage');
+    });
+}) as EventListener);
+
+window.addEventListener('scholarstream-auth-logout', () => {
+    console.log('🚪 [EXT] Logout event received');
+    chrome.storage.local.remove(['authToken', 'userProfile', 'lastLoggedToken']);
+});
+
+// ===== FALLBACK: Also poll localStorage for auth token (for pages already loaded) =====
 if (window.location.host.includes('localhost') || window.location.host.includes('scholarstream')) {
     const extractAndSendToken = () => {
         let token = localStorage.getItem('scholarstream_auth_token');
@@ -95,19 +116,20 @@ if (window.location.host.includes('localhost') || window.location.host.includes(
         }
 
         if (token) {
-            chrome.storage.local.set({ authToken: token }, () => {
-                chrome.storage.local.get(['lastLoggedToken'], (result) => {
-                    if (result.lastLoggedToken !== token) {
-                        console.log('🔑 [EXT] Real Firebase token captured!');
-                        chrome.storage.local.set({ lastLoggedToken: token });
-                    }
-                });
+            chrome.storage.local.get(['authToken'], (result) => {
+                // Only update if different (avoid unnecessary writes)
+                if (result.authToken !== token) {
+                    chrome.storage.local.set({ authToken: token }, () => {
+                        console.log('🔑 [EXT] Firebase token captured via localStorage poll');
+                    });
+                }
             });
         }
     };
 
+    // Initial check + periodic poll (less aggressive)
     extractAndSendToken();
-    setInterval(extractAndSendToken, 2000);
+    setInterval(extractAndSendToken, 5000);
 }
 
 // ===== INTELLIGENT SPARKLE ENGINE (Phase 3) =====

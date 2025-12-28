@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { syncAuthToExtension } from '@/utils/extensionSync';
+import { syncAuthToExtension, notifyExtensionLogout } from '@/utils/extensionSync';
 
 export interface User {
   uid: string;
@@ -177,6 +177,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('🚪 [SIGNOUT] Signing out...');
       await firebaseSignOut(auth);
       localStorage.removeItem('scholarstream_onboarding_complete');
+      localStorage.removeItem('scholarstream_auth_token');
+      
+      // Notify extension of logout
+      notifyExtensionLogout();
+      
       console.log('✅ [SIGNOUT] Signed out successfully');
     } catch (error: any) {
       console.error('❌ [SIGNOUT] Signout failed:', {
