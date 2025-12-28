@@ -464,7 +464,7 @@ class FocusEngine {
         if (!this.lastFilledElement) return;
         
         const input = this.lastFilledElement as HTMLInputElement | HTMLTextAreaElement;
-        const refinementInput = this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement;
+        const refinementInput = this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLTextAreaElement;
         const instruction = refinementInput.value.trim();
         
         if (!instruction) {
@@ -476,11 +476,22 @@ class FocusEngine {
         const currentContent = input.value;
         const fieldContext = this.analyzeField(input);
         
-        // Show loading state
+        // Show loading state on button
         const submitBtn = this.refinementOverlay.querySelector('#ss-refinement-submit') as HTMLButtonElement;
         const originalText = submitBtn.innerText;
         submitBtn.innerText = 'Refining...';
         submitBtn.disabled = true;
+        
+        // FAANG UX: Hide overlay and show "Refining..." feedback on the INPUT FIELD ITSELF immediately
+        this.hideRefinementOverlay();
+        
+        // Show refinement progress indicator on the field
+        this.showEnhancedReasoning(
+            `🔄 Refining: "${instruction.slice(0, 40)}..."`,
+            input,
+            fieldContext,
+            false
+        );
         
         try {
             const stored = await chrome.storage.local.get(['authToken', 'userProfile', 'documentStore']);
@@ -538,10 +549,9 @@ IMPORTANT:
             const refinedContent = data.sparkle_result?.content || data.filled_value || currentContent;
             
             // Apply refined content with typewriter effect
-            this.hideRefinementOverlay();
             await this.typewriterEffect(input, refinedContent);
             
-            // Show success feedback
+            // Show success feedback - replace the "Refining..." with success
             this.showEnhancedReasoning(
                 `✅ Refined based on: "${instruction.slice(0, 50)}..."`,
                 input,
@@ -551,13 +561,13 @@ IMPORTANT:
             
         } catch (error) {
             console.error('Refinement failed:', error);
-            refinementInput.style.borderColor = '#ef4444';
-            submitBtn.innerText = 'Failed ❌';
-            setTimeout(() => {
-                submitBtn.innerText = originalText;
-                submitBtn.disabled = false;
-                refinementInput.style.borderColor = '#334155';
-            }, 2000);
+            // Show error on the field
+            this.showEnhancedReasoning(
+                `❌ Refinement failed. Try again.`,
+                input,
+                fieldContext,
+                false
+            );
         } finally {
             submitBtn.innerText = originalText;
             submitBtn.disabled = false;

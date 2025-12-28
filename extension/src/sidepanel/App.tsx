@@ -752,7 +752,21 @@ export default function App() {
                             ? 'bg-blue-600 text-white'
                             : 'bg-slate-800 border border-slate-700'
                             }`}>
-                            <MarkdownMessage content={msg.text} role={msg.role} />
+                            {/* Render @mentions as highlighted tags in user messages */}
+                            {msg.role === 'user' ? (
+                                <p className="text-sm whitespace-pre-wrap">
+                                    {msg.text.split(/(@[\w\-_.]+)/g).map((part, i) => 
+                                        part.startsWith('@') ? (
+                                            <span key={i} className="inline-flex items-center bg-white/20 text-white px-1.5 py-0.5 rounded text-xs font-medium mx-0.5">
+                                                <FileText className="w-3 h-3 mr-1" />
+                                                {part.slice(1)}
+                                            </span>
+                                        ) : part
+                                    )}
+                                </p>
+                            ) : (
+                                <MarkdownMessage content={msg.text} role={msg.role} />
+                            )}
                         </div>
                         {msg.role === 'user' && (
                             <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center shrink-0">
@@ -808,33 +822,44 @@ export default function App() {
                     </button>
 
                     <div className="relative flex-1">
-                        {/* @ Mention Dropdown */}
+                        {/* @ Mention Dropdown - WhatsApp style */}
                         {showMentionDropdown && documentStore.documents.length > 0 && (
-                            <div className="absolute bottom-full left-0 mb-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto">
+                            <div className="absolute bottom-full left-0 mb-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                                <div className="px-3 py-1.5 text-[10px] text-slate-500 border-b border-slate-700 sticky top-0 bg-slate-800">
+                                    📎 Select document to reference
+                                </div>
                                 {documentStore.documents
                                     .filter(doc => doc.filename.toLowerCase().includes(mentionFilter.toLowerCase()))
-                                    .map((doc) => (
-                                        <button
+                                    .map((doc, index) => (
+                                        <div
                                             key={doc.id}
-                                            onClick={() => {
-                                                // Insert the document name at cursor position
+                                            onMouseDown={(e) => {
+                                                e.preventDefault(); // Prevent blur before click registers
+                                                e.stopPropagation();
+                                                // Insert doc as a highlighted tag-style mention
                                                 const beforeAt = input.slice(0, mentionCursorPos);
                                                 const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
-                                                const newInput = `${beforeAt}@${doc.filename.split('.')[0]} ${afterMention}`;
+                                                const docRef = `@${doc.filename.split('.')[0]}`;
+                                                const newInput = `${beforeAt}${docRef} ${afterMention}`.trim();
                                                 setInput(newInput);
                                                 setShowMentionDropdown(false);
                                                 setMentionFilter('');
-                                                inputRef.current?.focus();
+                                                setTimeout(() => inputRef.current?.focus(), 10);
                                             }}
-                                            className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2 transition-colors"
+                                            className={`px-3 py-2.5 text-sm hover:bg-blue-600/30 cursor-pointer flex items-center gap-2.5 transition-colors border-b border-slate-700/50 last:border-0 ${index === 0 ? 'bg-blue-600/20' : ''}`}
                                         >
-                                            <FileText className="w-4 h-4 text-blue-400" />
-                                            <span className="text-slate-200 truncate flex-1">{doc.filename}</span>
-                                            <span className="text-[10px] text-slate-500">{(doc.charCount / 1000).toFixed(1)}k</span>
-                                        </button>
+                                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                                <FileText className="w-4 h-4 text-blue-400" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <span className="text-slate-200 font-medium truncate block">{doc.filename}</span>
+                                                <span className="text-[10px] text-slate-500">{(doc.charCount / 1000).toFixed(1)}k chars • {doc.fileType}</span>
+                                            </div>
+                                            <span className="text-xs text-blue-400 px-2 py-0.5 bg-blue-500/10 rounded-full">Select</span>
+                                        </div>
                                     ))}
                                 {documentStore.documents.filter(doc => doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())).length === 0 && (
-                                    <div className="px-3 py-2 text-sm text-slate-500">No matching documents</div>
+                                    <div className="px-3 py-3 text-sm text-slate-500 text-center">No matching documents</div>
                                 )}
                             </div>
                         )}
@@ -872,6 +897,22 @@ export default function App() {
                                     setShowMentionDropdown(false);
                                     return;
                                 }
+                                // Arrow key navigation in dropdown
+                                if (showMentionDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab')) {
+                                    e.preventDefault();
+                                    // For simplicity, Tab/Enter selects first match
+                                    const firstMatch = documentStore.documents.find(doc => 
+                                        doc.filename.toLowerCase().includes(mentionFilter.toLowerCase())
+                                    );
+                                    if (firstMatch && (e.key === 'Tab')) {
+                                        const beforeAt = input.slice(0, mentionCursorPos);
+                                        const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
+                                        setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`.trim());
+                                        setShowMentionDropdown(false);
+                                        setMentionFilter('');
+                                    }
+                                    return;
+                                }
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     if (showMentionDropdown) {
                                         e.preventDefault();
@@ -882,7 +923,7 @@ export default function App() {
                                         if (firstMatch) {
                                             const beforeAt = input.slice(0, mentionCursorPos);
                                             const afterMention = input.slice(mentionCursorPos + mentionFilter.length + 1);
-                                            setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`);
+                                            setInput(`${beforeAt}@${firstMatch.filename.split('.')[0]} ${afterMention}`.trim());
                                             setShowMentionDropdown(false);
                                             setMentionFilter('');
                                         }
@@ -894,10 +935,6 @@ export default function App() {
                                     const target = e.target as HTMLTextAreaElement;
                                     target.style.height = '44px';
                                 }
-                            }}
-                            onBlur={() => {
-                                // Delay hiding to allow click on dropdown
-                                setTimeout(() => setShowMentionDropdown(false), 200);
                             }}
                             placeholder={isListening ? "Listening..." : "Ask Co-Pilot... (use @ to mention docs)"}
                             className={`w-full bg-slate-800 border-none rounded-xl py-3 pl-4 pr-20 focus:ring-2 focus:ring-blue-600 text-sm resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent ${isListening ? 'ring-2 ring-red-500 animate-pulse' : ''}`}

@@ -1,3 +1,15 @@
+"""
+ScholarStream Co-Pilot V2: Context-Aware Application Assistant
+
+IMPORTANT: This service receives project_context from the extension which contains
+the FULL TEXT content of uploaded documents (PDF, DOCX, TXT). The extension parses
+these documents client-side or via /api/documents/parse and sends the text content.
+
+KEY UPGRADES:
+1. Platform Detection: Knows if user is on DevPost, DoraHacks, etc.
+2. Tri-Fold Knowledge Base: User Profile + Uploaded Docs + Page Context
+3. Platform-Specific Coaching: Tailored advice for each application platform
+"""
 
 import structlog
 from typing import Dict, Any, List, Optional
@@ -11,14 +23,6 @@ logger = structlog.get_logger()
 
 
 class CopilotService:
-    """
-    ScholarStream Co-Pilot V2: Context-Aware Application Assistant
-    
-    KEY UPGRADES:
-    1. Platform Detection: Knows if user is on DevPost, DoraHacks, etc.
-    2. Tri-Fold Knowledge Base: User Profile + Uploaded Docs + Page Context
-    3. Platform-Specific Coaching: Tailored advice for each application platform
-    """
     
     # Platform-specific expert personas
     PLATFORM_PERSONAS = {
@@ -144,6 +148,9 @@ class CopilotService:
         page_url = page_context.get('url', '')
         platform_persona = self._detect_platform(page_url)
         
+        # V2: Make sure project_context is properly displayed in the prompt
+        has_project_docs = project_context and len(project_context.strip()) > 50
+        
         prompt = f"""
 You are the ScholarStream Co-Pilot V2: **{platform_persona['name']}**
 
@@ -154,8 +161,9 @@ You are an elite AI agent with deep expertise in: {platform_persona.get('experti
 1️⃣ USER PROFILE (Identity Layer):
 {json.dumps(user_profile, indent=2) if user_profile else "Not provided - ask user to complete their profile for personalized help"}
 
-2️⃣ PROJECT CONTEXT (Document Layer):
-{project_context if project_context else "No project document uploaded. Suggest user upload their resume/project README for better assistance."}
+2️⃣ PROJECT DOCUMENTS (Document Layer):
+{"✅ DOCUMENTS AVAILABLE - Use this content to answer the user's question:" if has_project_docs else "❌ No documents uploaded yet."}
+{project_context if has_project_docs else "Suggest user upload their resume/project README using the + button in the sidebar for better assistance."}
 
 3️⃣ CURRENT PAGE CONTEXT (Environment Layer):
 - Platform: {platform_persona['name']}
