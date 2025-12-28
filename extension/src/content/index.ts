@@ -941,10 +941,20 @@ IMPORTANT:
 
         const target = this.activeElement as HTMLInputElement;
 
-        // Check context availability
-        const stored = await chrome.storage.local.get(['userProfile', 'projectContext']);
+        // CRITICAL FIX: Check for documents in NEW documentStore, not legacy projectContext
+        const stored = await chrome.storage.local.get(['userProfile', 'documentStore']);
         const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
-        const hasDocument = !!stored.projectContext;
+        
+        // Check new multi-document store
+        const documentStore = stored.documentStore as { documents: any[] } | undefined;
+        const hasDocument = !!(documentStore?.documents && documentStore.documents.length > 0);
+        
+        console.log('[Sparkle] Context check:', {
+            hasProfile,
+            hasDocument,
+            docCount: documentStore?.documents?.length || 0,
+            docNames: documentStore?.documents?.map((d: any) => d.filename) || []
+        });
 
         // Enhanced field analysis
         const fieldContext = this.analyzeField(target);
@@ -1010,9 +1020,13 @@ IMPORTANT:
         if (!this.activeElement) return;
         const target = this.activeElement as HTMLInputElement;
         const fieldContext = this.analyzeField(target);
-        const stored = await chrome.storage.local.get(['userProfile', 'projectContext']);
+        
+        // FIXED: Check documentStore instead of legacy projectContext
+        const stored = await chrome.storage.local.get(['userProfile', 'documentStore']);
         const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
-        const hasDocument = !!stored.projectContext;
+        const documentStore = stored.documentStore as { documents: any[] } | undefined;
+        const hasDocument = !!(documentStore?.documents && documentStore.documents.length > 0);
+        
         await this.generateWithEnhancedContext(fieldContext, hasProfile, hasDocument);
     }
 
@@ -1041,10 +1055,13 @@ IMPORTANT:
         }
         element.dispatchEvent(new Event('change', { bubbles: true }));
 
-        const originalBg = element.style.backgroundColor;
-        element.style.transition = "background-color 0.5s";
-        element.style.backgroundColor = "#dcfce7";
-        setTimeout(() => element.style.backgroundColor = originalBg, 1000);
+        // FIXED: Use outline for success indicator instead of background (dark theme compatible)
+        element.style.outline = "2px solid #22c55e";
+        element.style.outlineOffset = "1px";
+        setTimeout(() => {
+            element.style.outline = "";
+            element.style.outlineOffset = "";
+        }, 2000);
     }
 }
 
@@ -1061,10 +1078,29 @@ async function generateFieldContentEnhanced(
     let projectContext = "";
 
     try {
-        const stored = await chrome.storage.local.get(['userProfile', 'projectContext']);
+        // CRITICAL FIX: Read from NEW documentStore (multi-doc system), not legacy projectContext
+        const stored = await chrome.storage.local.get(['userProfile', 'documentStore', 'kbSettings']);
         userProfile = stored.userProfile || {};
-        projectContext = stored.projectContext || "";
-    } catch (e) { }
+        
+        // Build project context from ALL documents in the store (for sparkle, use all docs)
+        const documentStore = stored.documentStore as { documents: any[] } | undefined;
+        if (documentStore?.documents && documentStore.documents.length > 0) {
+            projectContext = documentStore.documents
+                .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
+                .join('\n\n');
+            console.log(`[Sparkle] Using ${documentStore.documents.length} document(s) as context:`, 
+                documentStore.documents.map((d: any) => d.filename));
+        }
+        
+        // Apply KB settings - if profile is toggled OFF, clear userProfile
+        const kbSettings = stored.kbSettings as { useProfileAsKnowledge?: boolean } | undefined;
+        if (kbSettings && kbSettings.useProfileAsKnowledge === false && projectContext) {
+            console.log('[Sparkle] Profile excluded by KB settings');
+            userProfile = {}; // Clear profile when toggle is OFF and docs are present
+        }
+    } catch (e) {
+        console.error('[Sparkle] Failed to load context:', e);
+    }
 
     const storedToken = (await chrome.storage.local.get(['authToken'])).authToken;
     if (!storedToken) {
@@ -1223,23 +1259,89 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function handleAutoFill(projectContext?: string) {
-    const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
-    const formFields = inputs.map((el: any) => ({
-        id: el.id,
-        name: el.name,
-        type: el.type || el.tagName.toLowerCase(),
-        placeholder: el.placeholder,
-        label: (
-            document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim() ||
-            el.closest('label')?.textContent?.trim() ||
-            el.previousElementSibling?.textContent?.trim() ||
-            el.parentElement?.textContent?.trim() ||
-            ''
-        ).slice(0, 100),
-        selector: uniqueSelector(el)
-    })).filter(f => f.type !== 'hidden' && f.type !== 'submit' && f.type !== 'file');
+    // ENHANCED: Better field detection - find ALL visible inputs including those in cards/sections
+    const allInputs: HTMLElement[] = [];
+    
+    // Primary selector: All standard form elements
+    document.querySelectorAll('input, select, textarea').forEach(el => allInputs.push(el as HTMLElement));
+    
+    // Also find contenteditable elements (rich text editors)
+    document.querySelectorAll('[contenteditable="true"]').forEach(el => allInputs.push(el as HTMLElement));
+    
+    // Deduplicate by checking if element is already included
+    const seenElements = new Set<HTMLElement>();
+    const uniqueInputs = allInputs.filter(el => {
+        if (seenElements.has(el)) return false;
+        seenElements.add(el);
+        return true;
+    });
+    
+    const formFields = uniqueInputs.map((el: any) => {
+        // Enhanced label detection - look in multiple places
+        let label = '';
+        
+        // 1. Check for label[for="id"]
+        if (el.id) {
+            const labelEl = document.querySelector(`label[for="${el.id}"]`);
+            if (labelEl) label = labelEl.textContent?.trim() || '';
+        }
+        
+        // 2. Check if wrapped in label
+        if (!label) {
+            const closestLabel = el.closest('label');
+            if (closestLabel) label = closestLabel.textContent?.trim() || '';
+        }
+        
+        // 3. Check for previous sibling (often a label or heading)
+        if (!label && el.previousElementSibling) {
+            const prev = el.previousElementSibling;
+            if (prev.tagName === 'LABEL' || prev.tagName.match(/^H[1-6]$/) || prev.classList.contains('label')) {
+                label = prev.textContent?.trim() || '';
+            }
+        }
+        
+        // 4. Check parent for section heading or card title
+        if (!label) {
+            const parent = el.closest('section, .card, .form-group, [class*="field"], [class*="input"]');
+            if (parent) {
+                const heading = parent.querySelector('h1, h2, h3, h4, h5, h6, label, .label, [class*="title"], [class*="heading"]');
+                if (heading && heading !== el) {
+                    label = heading.textContent?.trim() || '';
+                }
+            }
+        }
+        
+        // 5. Fallback: Check aria-label or data attributes
+        if (!label) {
+            label = el.getAttribute('aria-label') || 
+                    el.getAttribute('data-label') || 
+                    el.getAttribute('title') || 
+                    el.name?.replace(/[-_]/g, ' ') || '';
+        }
+        
+        return {
+            id: el.id || '',
+            name: el.name || '',
+            type: el.type || el.tagName.toLowerCase(),
+            placeholder: el.placeholder || '',
+            label: label.slice(0, 150), // Extended limit for more context
+            selector: uniqueSelector(el),
+            // Extra context for better matching
+            ariaLabel: el.getAttribute('aria-label') || '',
+            dataTestId: el.getAttribute('data-testid') || el.getAttribute('data-test') || '',
+        };
+    }).filter(f => 
+        f.type !== 'hidden' && 
+        f.type !== 'submit' && 
+        f.type !== 'file' && 
+        f.type !== 'button' &&
+        f.type !== 'image' &&
+        f.type !== 'reset'
+    );
 
     if (formFields.length === 0) return { success: false, message: "No fields found" };
+    
+    console.log(`[Auto-Fill] Detected ${formFields.length} fields:`, formFields.map(f => f.label || f.name || f.id));
 
     let userProfile: any = {};
     try {
@@ -1299,8 +1401,15 @@ async function handleAutoFill(projectContext?: string) {
                     el.dispatchEvent(new Event('input', { bubbles: true }));
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                     filledCount++;
-                    el.style.border = "2px solid #22c55e";
-                    el.style.backgroundColor = "#f0fdf4";
+                    
+                    // FIXED: Use outline instead of background to avoid readability issues on dark themes
+                    el.style.outline = "2px solid #22c55e";
+                    el.style.outlineOffset = "1px";
+                    // Reset after 3 seconds
+                    setTimeout(() => {
+                        el.style.outline = "";
+                        el.style.outlineOffset = "";
+                    }, 3000);
                 }
             } catch (selectorError) {
                 console.warn(`[Auto-Fill] querySelector failed for "${selector}":`, selectorError);
