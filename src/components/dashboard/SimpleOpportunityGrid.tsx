@@ -7,6 +7,7 @@ interface SimpleOpportunityGridProps {
   opportunities: Scholarship[];
   view?: 'grid' | 'list';
   className?: string;
+  justFlushedIds?: Set<string>;
 }
 
 /**
@@ -16,7 +17,8 @@ interface SimpleOpportunityGridProps {
 export const SimpleOpportunityGrid = ({ 
   opportunities, 
   view = 'grid',
-  className 
+  className,
+  justFlushedIds = new Set(),
 }: SimpleOpportunityGridProps) => {
   const { savedScholarshipIds, toggleSaveScholarship, startApplication } = useScholarships();
 
@@ -40,6 +42,7 @@ export const SimpleOpportunityGrid = ({
           isSaved={savedScholarshipIds.has(scholarship.id)}
           onToggleSave={toggleSaveScholarship}
           onStartApplication={startApplication}
+          isJustAdded={justFlushedIds.has(scholarship.id)}
         />
       ))}
     </div>

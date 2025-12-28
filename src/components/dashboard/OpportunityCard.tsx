@@ -32,6 +32,7 @@ interface OpportunityCardProps {
   isSaved: boolean;
   onToggleSave: (id: string) => void;
   onStartApplication: (id: string) => void;
+  isJustAdded?: boolean;
 }
 
 // Type badge configuration
@@ -77,12 +78,14 @@ export const OpportunityCard = ({
   isSaved,
   onToggleSave,
   onStartApplication,
+  isJustAdded = false,
 }: OpportunityCardProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [imageError, setImageError] = useState(false);
   const deadlineInfo = getDeadlineInfo(scholarship.deadline);
   const isNew = isNewScholarship(scholarship.discovered_at);
+  const showNewBanner = isJustAdded || isNew;
 
   // Calculate match score - ALWAYS recalculate to fix 47% ghost issue
   const matchScore = useMemo(() => {
@@ -226,14 +229,25 @@ export const OpportunityCard = ({
       )}
       onClick={() => navigate(`/opportunity/${scholarship.id}`)}
     >
-      {/* NEW BANNER - Animated & Prominent */}
-      {isNew && (
+      {/* JUST ADDED Banner - Full width, very prominent */}
+      {isJustAdded && (
+        <div className="absolute inset-x-0 top-0 z-20">
+          <div className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white text-xs font-bold px-4 py-2 flex items-center justify-center gap-2 shadow-lg animate-pulse">
+            <span className="text-base">🎉</span>
+            <span>JUST ADDED</span>
+            <span className="text-base">✨</span>
+          </div>
+        </div>
+      )}
+
+      {/* NEW Badge - Corner badge for 72-hour new items (not just added) */}
+      {showNewBanner && !isJustAdded && (
         <div className="absolute -top-1 -right-1 z-20">
           <div className="relative">
             {/* Glow effect */}
             <div className="absolute inset-0 bg-primary rounded-full blur-md opacity-50 animate-pulse" />
             {/* Badge */}
-            <div className="relative bg-gradient-to-r from-primary via-primary to-primary/90 text-primary-foreground text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-primary-foreground/20 animate-bounce">
+            <div className="relative bg-gradient-to-r from-primary via-primary to-primary/90 text-primary-foreground text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg border-2 border-primary-foreground/20">
               ✨ NEW
             </div>
           </div>
@@ -243,6 +257,7 @@ export const OpportunityCard = ({
       {/* Top accent bar based on match score */}
       <div className={cn(
         'h-1 w-full',
+        isJustAdded ? 'mt-8' : '', // Add margin when just added banner is shown
         matchScore >= 85 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
           matchScore >= 70 ? 'bg-gradient-to-r from-emerald-500 to-teal-500' :
             matchScore >= 50 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :

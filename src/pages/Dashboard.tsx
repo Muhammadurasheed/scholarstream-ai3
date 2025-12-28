@@ -56,7 +56,8 @@ const Dashboard = () => {
     opportunities: realtimeOpportunities,
     newOpportunitiesCount,
     clearNewOpportunitiesCount,
-    flushBuffer // Export flush function
+    flushBuffer,
+    justFlushedIds,
   } = useRealtimeOpportunities();
 
   // User profile state - fetched from Firestore with localStorage fallback
@@ -506,7 +507,7 @@ const Dashboard = () => {
                     </p>
                   </div>
                 </div>
-                <SimpleOpportunityGrid opportunities={groupedOpportunities.highMatch.slice(0, 4)} view="grid" />
+                <SimpleOpportunityGrid opportunities={groupedOpportunities.highMatch.slice(0, 4)} view="grid" justFlushedIds={justFlushedIds} />
               </section>
             )}
 
@@ -573,6 +574,7 @@ const Dashboard = () => {
                         view={view}
                         itemsPerPage={12}
                         loading={loading && scholarships.length === 0}
+                        justFlushedIds={justFlushedIds}
                       />
                     )}
                   </div>
