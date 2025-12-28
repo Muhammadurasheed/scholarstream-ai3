@@ -100,7 +100,38 @@ def convert_to_scholarship(opp_data: Dict[str, Any], user_profile: UserProfile) 
         estimated_time = "2-4 hours" if (essay_bool or recommendation_letters > 0) else "30-60 minutes"
         expected_value = float(round(amount * (match_score / 100.0), 2))
 
-        source_url = _to_str(opp_data.get("source_url") or opp_data.get("url"), "")
+        # CRITICAL FIX: Ensure source_url is ALWAYS populated
+        # Try multiple fallback sources for URL
+        source_url = _to_str(
+            opp_data.get("source_url") or 
+            opp_data.get("url") or 
+            opp_data.get("apply_url") or 
+            opp_data.get("link") or
+            opp_data.get("application_url"),
+            ""
+        )
+        
+        # If still no URL, attempt to construct from known platforms
+        if not source_url:
+            platform = _to_str(opp_data.get("source") or opp_data.get("platform"), "").lower()
+            slug = _to_str(opp_data.get("slug") or opp_data.get("handle"), "")
+            name = _to_str(opp_data.get("name"), "")
+            
+            if slug or name:
+                url_slug = slug or name.lower().replace(" ", "-").replace("'", "")[:50]
+                if "devpost" in platform:
+                    source_url = f"https://{url_slug}.devpost.com/"
+                elif "dorahacks" in platform:
+                    source_url = f"https://dorahacks.io/hackathon/{url_slug}"
+                elif "mlh" in platform:
+                    source_url = f"https://mlh.io/seasons/2025/events"  # MLH events page
+                elif "superteam" in platform or "earn" in platform:
+                    source_url = f"https://earn.superteam.fun/listings/{url_slug}"
+                elif "intigriti" in platform:
+                    source_url = f"https://www.intigriti.com/researcher/programs"
+                elif "hackquest" in platform:
+                    source_url = f"https://hackquest.io/events/{url_slug}"
+        
         source_type = map_type_to_source(opp_data.get("type", "scholarship"))
         if _to_str(opp_data.get("discovered_by")).lower() == "ai":
             source_type = "ai_discovered"

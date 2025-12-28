@@ -139,16 +139,19 @@ class FocusEngine {
     private tooltip: HTMLDivElement;
     private thoughtBubble: HTMLDivElement;
     private guidanceBubble: HTMLDivElement;
+    private refinementOverlay: HTMLDivElement; // NEW: In-field refinement
     private isStreaming = false;
     private isDragging = false;
     private dragOffset = { x: 0, y: 0 };
     private sparkleHidden = false;
+    private lastFilledElement: HTMLElement | null = null; // Track last filled element
 
     constructor() {
         this.sparkleBtn = this.createSparkleButton();
         this.tooltip = this.createTooltip();
         this.thoughtBubble = this.createThoughtBubble();
         this.guidanceBubble = this.createGuidanceBubble();
+        this.refinementOverlay = this.createRefinementOverlay(); // NEW
         this.initListeners();
     }
 
@@ -339,10 +342,214 @@ class FocusEngine {
         return div;
     }
 
+    // NEW: Create Refinement Overlay (Double-click to refine)
+    private createRefinementOverlay(): HTMLDivElement {
+        const overlay = document.createElement('div');
+        overlay.id = 'ss-refinement-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            display: none;
+            z-index: 2147483647;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 2px solid #3b82f6;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+            min-width: 300px;
+            max-width: 400px;
+        `;
+        overlay.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <div style="width: 24px; height: 24px; background: linear-gradient(135deg, #FF6B6B, #4ECDC4); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"></path></svg>
+                </div>
+                <span style="font-size: 13px; font-weight: 600; color: #e2e8f0; font-family: system-ui, sans-serif;">Refine Content</span>
+                <button id="ss-refinement-close" style="margin-left: auto; background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; padding: 0;">×</button>
+            </div>
+            <input 
+                type="text" 
+                id="ss-refinement-input" 
+                placeholder="e.g., Make it more detailed, add my Python experience..."
+                style="width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px; font-family: system-ui, sans-serif; outline: none; box-sizing: border-box;"
+            />
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+                <button id="ss-refinement-expand" style="flex: 1; padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; font-size: 12px; cursor: pointer; font-family: system-ui, sans-serif;">📝 More detailed</button>
+                <button id="ss-refinement-concise" style="flex: 1; padding: 8px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; font-size: 12px; cursor: pointer; font-family: system-ui, sans-serif;">✂️ More concise</button>
+                <button id="ss-refinement-submit" style="flex: 1; padding: 8px 12px; background: #3b82f6; border: none; border-radius: 6px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; font-family: system-ui, sans-serif;">Refine ✨</button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        
+        // Event listeners for refinement
+        overlay.querySelector('#ss-refinement-close')?.addEventListener('click', () => this.hideRefinementOverlay());
+        overlay.querySelector('#ss-refinement-expand')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more detailed and comprehensive. Add specific examples and elaborate on key points.'));
+        overlay.querySelector('#ss-refinement-concise')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more concise and to the point. Remove unnecessary words while keeping the core message.'));
+        overlay.querySelector('#ss-refinement-submit')?.addEventListener('click', () => this.submitRefinement());
+        overlay.querySelector('#ss-refinement-input')?.addEventListener('keydown', (e) => {
+            if ((e as KeyboardEvent).key === 'Enter') this.submitRefinement();
+            if ((e as KeyboardEvent).key === 'Escape') this.hideRefinementOverlay();
+        });
+        
+        return overlay;
+    }
+
     private initListeners() {
         document.addEventListener('focusin', (e) => this.handleFocus(e), true);
         document.addEventListener('scroll', () => this.updatePosition(), true);
         window.addEventListener('resize', () => this.updatePosition());
+        
+        // NEW: Double-click listener for refinement on filled fields
+        document.addEventListener('dblclick', (e) => this.handleDoubleClick(e), true);
+    }
+
+    // NEW: Handle double-click for refinement
+    private handleDoubleClick(e: MouseEvent) {
+        const target = e.target as HTMLElement;
+        if (!target) return;
+
+        // Only trigger on input/textarea that has content
+        if (!['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+        
+        const input = target as HTMLInputElement | HTMLTextAreaElement;
+        if (input.type === 'file' || input.type === 'hidden' || input.type === 'submit') return;
+        
+        // Only show refinement if field has content (likely AI-filled)
+        if (!input.value || input.value.trim().length < 20) return;
+        
+        // Prevent text selection on double-click
+        e.preventDefault();
+        
+        this.lastFilledElement = input;
+        this.showRefinementOverlay(input);
+    }
+
+    private showRefinementOverlay(target: HTMLElement) {
+        const rect = target.getBoundingClientRect();
+        const top = rect.bottom + window.scrollY + 8;
+        const left = rect.left + window.scrollX;
+        
+        this.refinementOverlay.style.top = `${top}px`;
+        this.refinementOverlay.style.left = `${left}px`;
+        this.refinementOverlay.style.display = 'block';
+        
+        // Focus the input
+        setTimeout(() => {
+            (this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement)?.focus();
+        }, 100);
+    }
+
+    private hideRefinementOverlay() {
+        this.refinementOverlay.style.display = 'none';
+        (this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement).value = '';
+    }
+
+    private async applyQuickRefinement(instruction: string) {
+        (this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement).value = instruction;
+        await this.submitRefinement();
+    }
+
+    private async submitRefinement() {
+        if (!this.lastFilledElement) return;
+        
+        const input = this.lastFilledElement as HTMLInputElement | HTMLTextAreaElement;
+        const refinementInput = this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement;
+        const instruction = refinementInput.value.trim();
+        
+        if (!instruction) {
+            refinementInput.style.borderColor = '#ef4444';
+            setTimeout(() => refinementInput.style.borderColor = '#334155', 1000);
+            return;
+        }
+        
+        const currentContent = input.value;
+        const fieldContext = this.analyzeField(input);
+        
+        // Show loading state
+        const submitBtn = this.refinementOverlay.querySelector('#ss-refinement-submit') as HTMLButtonElement;
+        const originalText = submitBtn.innerText;
+        submitBtn.innerText = 'Refining...';
+        submitBtn.disabled = true;
+        
+        try {
+            const stored = await chrome.storage.local.get(['authToken', 'userProfile', 'documentStore']);
+            const authToken = stored.authToken;
+            if (!authToken) throw new Error('Not authenticated');
+            
+            // Get project context from document store
+            let projectContext = '';
+            if (stored.documentStore?.documents?.length > 0) {
+                projectContext = stored.documentStore.documents
+                    .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
+                    .join('\n\n');
+            }
+            
+            const refinementPrompt = `TASK: Refine the following content based on user instruction.
+
+CURRENT CONTENT:
+${currentContent}
+
+USER INSTRUCTION: ${instruction}
+
+FIELD CONTEXT:
+- Field Type: ${fieldContext.fieldCategory}
+- Platform: ${fieldContext.platformHint}
+${fieldContext.characterLimit ? `- Character Limit: ${fieldContext.characterLimit}` : ''}
+${fieldContext.wordLimit ? `- Word Limit: ${fieldContext.wordLimit}` : ''}
+
+IMPORTANT:
+1. Maintain the core message and facts
+2. Apply the user's refinement instruction
+3. Keep the same approximate length unless instructed otherwise
+4. Return ONLY the refined content, no explanations`;
+
+            const response = await fetch(ENDPOINTS.mapFields, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    form_fields: [],
+                    user_profile: stored.userProfile || {},
+                    target_field: {
+                        ...fieldContext,
+                        existingContent: currentContent
+                    },
+                    project_context: projectContext,
+                    instruction: refinementPrompt
+                })
+            });
+
+            if (!response.ok) throw new Error('Refinement failed');
+            
+            const data = await response.json();
+            const refinedContent = data.sparkle_result?.content || data.filled_value || currentContent;
+            
+            // Apply refined content with typewriter effect
+            this.hideRefinementOverlay();
+            await this.typewriterEffect(input, refinedContent);
+            
+            // Show success feedback
+            this.showEnhancedReasoning(
+                `✅ Refined based on: "${instruction.slice(0, 50)}..."`,
+                input,
+                fieldContext,
+                false
+            );
+            
+        } catch (error) {
+            console.error('Refinement failed:', error);
+            refinementInput.style.borderColor = '#ef4444';
+            submitBtn.innerText = 'Failed ❌';
+            setTimeout(() => {
+                submitBtn.innerText = originalText;
+                submitBtn.disabled = false;
+                refinementInput.style.borderColor = '#334155';
+            }, 2000);
+        } finally {
+            submitBtn.innerText = originalText;
+            submitBtn.disabled = false;
+        }
     }
 
     private handleFocus(e: FocusEvent) {
