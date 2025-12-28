@@ -10,6 +10,7 @@ interface PaginatedGridProps {
   view?: 'grid' | 'list';
   itemsPerPage?: number;
   loading?: boolean;
+  justFlushedIds?: Set<string>;
 }
 
 /**
@@ -21,6 +22,7 @@ export const PaginatedGrid = ({
   view = 'grid',
   itemsPerPage = 12,
   loading = false,
+  justFlushedIds = new Set(),
 }: PaginatedGridProps) => {
   const {
     paginatedItems,
@@ -66,7 +68,8 @@ export const PaginatedGrid = ({
       {/* Grid */}
       <SimpleOpportunityGrid 
         opportunities={paginatedItems} 
-        view={view} 
+        view={view}
+        justFlushedIds={justFlushedIds}
       />
 
       {/* Pagination */}

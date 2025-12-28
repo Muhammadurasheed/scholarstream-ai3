@@ -18,25 +18,45 @@ export function useRealtimeOpportunities() {
   const [bufferedOpportunities, setBufferedOpportunities] = useState<Scholarship[]>([]);
   // Counter for new opportunities (for NotificationPill)
   const [newOpportunitiesCount, setNewOpportunitiesCount] = useState(0);
+  // Track IDs that were just flushed (for highlighting)
+  const [justFlushedIds, setJustFlushedIds] = useState<Set<string>>(new Set());
 
   // WebSocket refs
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
+  const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Clear new count
   const clearNewOpportunitiesCount = useCallback(() => {
     setNewOpportunitiesCount(0);
   }, []);
 
+  // Clear "just flushed" highlighting after timeout
+  const clearJustFlushed = useCallback(() => {
+    setJustFlushedIds(new Set());
+  }, []);
+
   // Flush function: Moves buffered items to main list
   const flushBuffer = useCallback(() => {
     if (bufferedOpportunities.length === 0) return;
 
+    // Track which IDs are being flushed for highlighting
+    const flushedIds = new Set(bufferedOpportunities.map(o => o.id));
+    setJustFlushedIds(flushedIds);
+
     setOpportunities(prev => [...bufferedOpportunities, ...prev]);
     setBufferedOpportunities([]);
     setNewOpportunitiesCount(0);
+
+    // Clear the highlight after 30 seconds
+    if (flushTimeoutRef.current) {
+      clearTimeout(flushTimeoutRef.current);
+    }
+    flushTimeoutRef.current = setTimeout(() => {
+      setJustFlushedIds(new Set());
+    }, 30000);
 
     // Smooth scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -201,7 +221,9 @@ export function useRealtimeOpportunities() {
     opportunities,
     newOpportunitiesCount,
     clearNewOpportunitiesCount,
-    flushBuffer, // Export flush function
+    flushBuffer,
+    justFlushedIds,
+    clearJustFlushed,
     reconnect: connect,
   };
 }
