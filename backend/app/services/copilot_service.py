@@ -134,38 +134,54 @@ class CopilotService:
                    query: str, 
                    page_context: Dict[str, Any], 
                    project_context: Optional[str] = None,
-                   user_profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                   user_profile: Optional[Dict[str, Any]] = None,
+                   mentioned_docs: Optional[List[str]] = None,
+                   include_profile: bool = True) -> Dict[str, Any]:
         """
-        Main chat handler V2 - Now with platform-aware coaching.
+        Main chat handler V2 - Now with FAANG-level knowledge base control.
         
-        TRI-FOLD KNOWLEDGE BASE:
-        1. User Profile (skills, interests, background)
-        2. Uploaded Assets (resume, project docs)
-        3. Real-Time Page Context (current application page)
+        STRICT KNOWLEDGE BASE RULES:
+        1. If @mentions provided: ONLY use those specific documents
+        2. Profile inclusion is controlled by toggle (include_profile flag)
+        3. If no mentions and no profile: Suggest user upload docs or complete profile
         """
         
         # V2: Detect platform and get specialized persona
         page_url = page_context.get('url', '')
         platform_persona = self._detect_platform(page_url)
         
-        # V2: Make sure project_context is properly displayed in the prompt
+        # V2: Build knowledge base section based on what's provided
         has_project_docs = project_context and len(project_context.strip()) > 50
+        
+        # Build document context info
+        doc_section = ""
+        if has_project_docs:
+            if mentioned_docs and len(mentioned_docs) > 0:
+                doc_section = f"""✅ EXPLICITLY MENTIONED DOCUMENTS ({len(mentioned_docs)} docs):
+{', '.join(mentioned_docs)}
+
+DOCUMENT CONTENT (Use this to answer the user's question):
+{project_context}"""
+            else:
+                doc_section = f"""✅ DOCUMENTS AVAILABLE:
+{project_context}"""
+        else:
+            doc_section = "❌ No documents provided. Suggest user upload their resume/project README using the + button."
         
         prompt = f"""
 You are the ScholarStream Co-Pilot V2: **{platform_persona['name']}**
 
 You are an elite AI agent with deep expertise in: {platform_persona.get('expertise', 'opportunity applications')}
 
-=== TRI-FOLD KNOWLEDGE BASE ===
+=== KNOWLEDGE BASE (STRICTLY USE ONLY WHAT'S PROVIDED) ===
 
-1️⃣ USER PROFILE (Identity Layer):
-{json.dumps(user_profile, indent=2) if user_profile else "Not provided - ask user to complete their profile for personalized help"}
+1️⃣ USER PROFILE {'(INCLUDED)' if include_profile else '(EXCLUDED by user preference)'}:
+{json.dumps(user_profile, indent=2) if (user_profile and include_profile) else "Profile not included in this query. Use only document content."}
 
-2️⃣ PROJECT DOCUMENTS (Document Layer):
-{"✅ DOCUMENTS AVAILABLE - Use this content to answer the user's question:" if has_project_docs else "❌ No documents uploaded yet."}
-{project_context if has_project_docs else "Suggest user upload their resume/project README using the + button in the sidebar for better assistance."}
+2️⃣ PROJECT DOCUMENTS:
+{doc_section}
 
-3️⃣ CURRENT PAGE CONTEXT (Environment Layer):
+3️⃣ CURRENT PAGE CONTEXT:
 - Platform: {platform_persona['name']}
 - URL: {page_url}
 - Page Title: {page_context.get('title', 'Unknown')}
@@ -178,14 +194,15 @@ You are an elite AI agent with deep expertise in: {platform_persona.get('experti
 "{query}"
 
 === YOUR TASK ===
-1. **Analyze** the user's query in context of the current page and their profile
-2. **Determine Intent**:
+1. **Analyze** the user's query in context of the provided knowledge base
+2. **Use ONLY provided context**: If profile is excluded, do NOT infer profile data
+3. **Determine Intent**:
    - Q&A: Answer questions about the opportunity/platform
-   - DRAFTING: Write essays, cover letters, short answers using their profile
+   - DRAFTING: Write essays, cover letters, short answers using the provided knowledge
    - COACHING: Provide strategic advice for winning this specific type of opportunity
    - FILLING: Generate field auto-fill actions when explicitly requested
-3. **Personalize**: Reference specific skills/projects from their profile when relevant
-4. **Platform Expertise**: Apply your specialized knowledge of this platform's judging criteria
+4. **Personalize**: Reference specific details from the provided documents and profile (if included)
+5. **Platform Expertise**: Apply your specialized knowledge of this platform's judging criteria
 
 === OUTPUT FORMAT (JSON ONLY) ===
 {{
