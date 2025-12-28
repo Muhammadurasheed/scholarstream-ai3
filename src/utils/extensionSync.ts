@@ -1,51 +1,52 @@
 import { User } from '../contexts/AuthContext';
 
-// Optional: configure the Chrome Extension ID via env for different builds (dev/prod)
-// If unset or invalid, we simply skip unified auth sync.
-const EXTENSION_ID = (import.meta as any).env?.VITE_CHROME_EXTENSION_ID || 'pngiojijaflejacjoogjapkglpfelp';
-
-const isValidExtensionId = (id: unknown) => typeof id === 'string' && /^[a-p]{32}$/.test(id);
-
 /**
- * Sends the current Auth Token and User Profile to the Chrome Extension
- * to enable "Unified Auth" (Zero-Touch Login).
+ * UNIFIED AUTH SYNC (Zero-Config)
+ * 
+ * Uses a CustomEvent dispatched on `window` that the extension's content script
+ * listens for. This approach:
+ * - Requires NO extension ID configuration
+ * - Works across dev/prod builds without changes
+ * - Fails silently if extension not installed (no errors in console)
+ * 
+ * Flow:
+ * 1. Web app dispatches `scholarstream-auth-sync` event with token + user
+ * 2. Extension content script catches it, forwards to background
+ * 3. Background stores in chrome.storage.local → triggers WebSocket reconnect
  */
 export const syncAuthToExtension = (token: string, user: User) => {
-  const chrome = (window as any).chrome;
-
-  if (!chrome?.runtime?.sendMessage) return;
-
-  if (!isValidExtensionId(EXTENSION_ID)) {
-    // Avoid throwing: web app auth must never depend on extension presence.
-    console.log('⚠️ [Extension Sync] Skipping: invalid/missing extension id');
-    return;
-  }
-
   try {
-    console.log('🔄 [Extension Sync] Sending session to Extension...');
-
-    chrome.runtime.sendMessage(
-      EXTENSION_ID,
-      {
-        type: 'SYNC_AUTH',
-        token,
-        user: {
-          uid: user.uid,
-          email: user.email,
-          name: user.name,
-        },
+    const payload = {
+      token,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        name: user.name,
       },
-      (response: any) => {
-        if (chrome.runtime.lastError) {
-          // Normal if extension is not installed / not listening.
-          console.log('⚠️ [Extension Sync] Extension not listening (not installed?)');
-        } else {
-          console.log('✅ [Extension Sync] Success!', response);
-        }
-      }
-    );
+    };
+
+    // Dispatch custom event that the extension's content script listens for
+    const event = new CustomEvent('scholarstream-auth-sync', {
+      detail: payload,
+    });
+    window.dispatchEvent(event);
+
+    console.log('🔄 [Extension Sync] Auth event dispatched');
   } catch (err) {
-    // Defensive: never let extension messaging break web auth.
-    console.log('⚠️ [Extension Sync] Send failed');
+    // Fail silently - extension sync should never break web auth
+    console.log('⚠️ [Extension Sync] Event dispatch failed (extension may not be installed)');
+  }
+};
+
+/**
+ * Notify extension that user has logged out
+ */
+export const notifyExtensionLogout = () => {
+  try {
+    const event = new CustomEvent('scholarstream-auth-logout');
+    window.dispatchEvent(event);
+    console.log('🔄 [Extension Sync] Logout event dispatched');
+  } catch {
+    // Fail silently
   }
 };
