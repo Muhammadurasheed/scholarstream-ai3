@@ -165,9 +165,36 @@ class CortexFlinkProcessor:
         if 'name' not in event and 'title' in event:
             event['name'] = event['title']
 
-        # Standardize 'source_url'
-        if 'source_url' not in event and 'url' in event:
-             event['source_url'] = event['url']
+        # Standardize 'source_url' with multiple fallbacks
+        if not event.get('source_url'):
+            event['source_url'] = (
+                event.get('url') or 
+                event.get('apply_url') or 
+                event.get('link') or 
+                event.get('application_url') or
+                ''
+            )
+        
+        # CRITICAL: Construct URL from platform + slug if still missing
+        if not event.get('source_url'):
+            platform = str(event.get('source', '')).lower()
+            slug = event.get('slug') or event.get('handle') or ''
+            name = event.get('name') or event.get('title') or ''
+            url_slug = slug or name.lower().replace(' ', '-').replace("'", "")[:50]
+            
+            if url_slug:
+                if 'devpost' in platform:
+                    event['source_url'] = f"https://{url_slug}.devpost.com/"
+                elif 'dorahacks' in platform:
+                    event['source_url'] = f"https://dorahacks.io/hackathon/{url_slug}"
+                elif 'superteam' in platform or 'earn' in platform:
+                    event['source_url'] = f"https://earn.superteam.fun/listings/{url_slug}"
+                elif 'hackquest' in platform:
+                    event['source_url'] = f"https://hackquest.io/events/{url_slug}"
+                    
+            if event.get('source_url'):
+                logger.info("Constructed source_url from platform/slug", 
+                           url=event['source_url'][:60], platform=platform)
         
         # 3. WINDOW MANAGEMENT
         self._cleanup_window(now)

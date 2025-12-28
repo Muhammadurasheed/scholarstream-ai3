@@ -465,6 +465,9 @@ export default function App() {
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (tab?.id) {
+                // Get combined project context from all documents
+                const projectContext = getActiveProjectContext();
+                
                 const response = await chrome.tabs.sendMessage(tab.id, {
                     type: 'AUTO_FILL_REQUEST',
                     projectContext: projectContext || undefined
@@ -623,37 +626,46 @@ export default function App() {
                             </button>
                         </div>
 
-                        {/* Document Status */}
-                        <div className="flex items-center gap-2">
+                        {/* Document List - Multi-document support */}
+                        <div className="space-y-1">
                             {contextStatus.isProcessing ? (
-                                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                            ) : contextStatus.hasDocument ? (
-                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                <div className="flex items-center gap-2">
+                                    <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                                    <span className="text-xs text-slate-300">Processing...</span>
+                                </div>
+                            ) : documentStore.documents.length > 0 ? (
+                                documentStore.documents.map((doc) => (
+                                    <div key={doc.id} className="flex items-center gap-2 group">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                                        <span className="text-xs text-slate-300 flex-1 truncate" title={doc.filename}>
+                                            {doc.filename}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">
+                                            {(doc.charCount / 1000).toFixed(1)}k
+                                        </span>
+                                        <button
+                                            onClick={() => removeDocument(doc.id)}
+                                            className="text-slate-600 hover:text-red-400 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Remove document"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))
                             ) : (
-                                <Circle className="w-4 h-4 text-slate-500" />
-                            )}
-                            <span className="text-xs text-slate-300 flex-1 truncate">
-                                {contextStatus.isProcessing
-                                    ? 'Processing...'
-                                    : contextStatus.hasDocument
-                                        ? contextStatus.documentName
-                                        : 'No document'}
-                            </span>
-                            {contextStatus.hasDocument && (
-                                <>
-                                    <span className="text-xs text-slate-500">
-                                        {(contextStatus.documentCharCount / 1000).toFixed(1)}k
-                                    </span>
-                                    <button
-                                        onClick={clearDocument}
-                                        className="text-slate-500 hover:text-red-400 p-0.5"
-                                        title="Remove document"
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </>
+                                <div className="flex items-center gap-2">
+                                    <Circle className="w-4 h-4 text-slate-500" />
+                                    <span className="text-xs text-slate-400">No documents loaded</span>
+                                </div>
                             )}
                         </div>
+                        
+                        {/* @ Mention hint */}
+                        {documentStore.documents.length > 1 && (
+                            <div className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-1 rounded mt-1">
+                                💡 Use @filename in chat to reference specific docs
+                            </div>
+                        )}
 
                         {/* Processing Error */}
                         {contextStatus.processingError && (
@@ -680,9 +692,9 @@ export default function App() {
                             {contextStatus.isProcessing ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
-                                <Upload className="w-3 h-3" />
+                                <Plus className="w-3 h-3" />
                             )}
-                            {contextStatus.hasDocument ? 'Replace Doc' : 'Upload Doc'}
+                            Add Document
                         </button>
                         <button
                             onClick={() => window.open('http://localhost:8080/profile', '_blank')}
@@ -775,16 +787,16 @@ export default function App() {
                         disabled={contextStatus.isProcessing}
                         className={`p-2 rounded-full transition-colors ${contextStatus.isProcessing
                             ? 'text-blue-400 bg-blue-500/10 animate-pulse'
-                            : projectContext
+                            : documentStore.documents.length > 0
                                 ? 'text-green-400 bg-green-500/10'
                                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                             }`}
-                        title={contextStatus.isProcessing ? 'Processing...' : 'Upload Project Context'}
+                        title={contextStatus.isProcessing ? 'Processing...' : `Upload Document (${documentStore.documents.length} loaded)`}
                     >
                         {contextStatus.isProcessing ? (
                             <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
-                            <Upload className="w-5 h-5" />
+                            <Plus className="w-5 h-5" />
                         )}
                     </button>
 
