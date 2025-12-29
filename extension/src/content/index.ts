@@ -1078,25 +1078,60 @@ async function generateFieldContentEnhanced(
     let projectContext = "";
 
     try {
-        // CRITICAL FIX: Read from NEW documentStore (multi-doc system), not legacy projectContext
-        const stored = await chrome.storage.local.get(['userProfile', 'documentStore', 'kbSettings']);
-        userProfile = stored.userProfile || {};
+        // CRITICAL FIX: Read last mentioned docs from chat session, NOT all documents
+        // This ensures sparkle uses ONLY the docs that were @mentioned in the last chat message
+        const stored = await chrome.storage.local.get([
+            'userProfile', 
+            'documentStore', 
+            'kbSettings',
+            'lastMentionedDocs',  // NEW: Docs mentioned in last chat
+            'lastKbSettings'       // NEW: KB settings from last chat
+        ]);
         
-        // Build project context from ALL documents in the store (for sparkle, use all docs)
+        userProfile = stored.userProfile || {};
         const documentStore = stored.documentStore as { documents: any[] } | undefined;
-        if (documentStore?.documents && documentStore.documents.length > 0) {
+        const lastMentionedDocs = stored.lastMentionedDocs as { id: string; filename: string }[] | undefined;
+        const lastKbSettings = stored.lastKbSettings as { includeProfile: boolean; hasMentionedDocs: boolean } | undefined;
+        
+        // STRICT KB SYNC: If docs were mentioned in chat, use ONLY those docs
+        if (lastMentionedDocs && lastMentionedDocs.length > 0 && documentStore?.documents) {
+            // Filter to only the mentioned documents
+            const mentionedFilenames = new Set(lastMentionedDocs.map(d => d.filename.toLowerCase()));
+            const mentionedDocs = documentStore.documents.filter((d: any) => 
+                mentionedFilenames.has(d.filename.toLowerCase())
+            );
+            
+            if (mentionedDocs.length > 0) {
+                projectContext = mentionedDocs
+                    .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
+                    .join('\n\n');
+                console.log(`[Sparkle] Using ONLY ${mentionedDocs.length} mentioned doc(s):`, 
+                    mentionedDocs.map((d: any) => d.filename));
+            }
+            
+            // Use the KB settings from the last chat (profile inclusion)
+            if (lastKbSettings && !lastKbSettings.includeProfile) {
+                console.log('[Sparkle] Profile excluded by last chat KB settings');
+                userProfile = {};
+            }
+        } else if (documentStore?.documents && documentStore.documents.length > 0) {
+            // NO docs were mentioned in chat - fallback: use all docs (backwards compatible)
+            // But check kbSettings toggle
+            const kbSettings = stored.kbSettings as { useProfileAsKnowledge?: boolean } | undefined;
+            
             projectContext = documentStore.documents
                 .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
                 .join('\n\n');
-            console.log(`[Sparkle] Using ${documentStore.documents.length} document(s) as context:`, 
+            console.log(`[Sparkle] No chat mentions - using all ${documentStore.documents.length} doc(s):`, 
                 documentStore.documents.map((d: any) => d.filename));
-        }
-        
-        // Apply KB settings - if profile is toggled OFF, clear userProfile
-        const kbSettings = stored.kbSettings as { useProfileAsKnowledge?: boolean } | undefined;
-        if (kbSettings && kbSettings.useProfileAsKnowledge === false && projectContext) {
-            console.log('[Sparkle] Profile excluded by KB settings');
-            userProfile = {}; // Clear profile when toggle is OFF and docs are present
+            
+            // Apply KB toggle for profile
+            if (kbSettings && kbSettings.useProfileAsKnowledge === false) {
+                console.log('[Sparkle] Profile excluded by KB toggle');
+                userProfile = {};
+            }
+        } else {
+            console.log('[Sparkle] No documents available');
         }
     } catch (e) {
         console.error('[Sparkle] Failed to load context:', e);
