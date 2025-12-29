@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { TermsModal } from '@/components/modals/TermsModal';
 import { PrivacyModal } from '@/components/modals/PrivacyModal';
+import ssLogo from '@/asset/ss_logo.png';
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ const SignUp = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -34,7 +35,7 @@ const SignUp = () => {
     confirmPassword: '',
     terms: '',
   });
-  
+
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
@@ -65,7 +66,7 @@ const SignUp = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate all fields
     const emailError = validateEmail(formData.email);
     const passwordError = validatePassword(formData.password);
@@ -135,9 +136,9 @@ const SignUp = () => {
 
         <div className="mx-auto w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold gradient-primary bg-clip-text text-transparent mb-2">
-              ScholarStream
-            </h1>
+            <div className="flex justify-center mb-4">
+              <img src={ssLogo} alt="ScholarStream Logo" className="w-16 h-16 object-contain" />
+            </div>
             <h2 className="text-2xl font-semibold mb-2">Start Finding Your Scholarships</h2>
             <p className="text-muted-foreground">Create your free account in 2 minutes</p>
           </div>
@@ -190,7 +191,7 @@ const SignUp = () => {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                
+
                 {/* Password strength indicator */}
                 {formData.password && (
                   <div className="space-y-2">
@@ -198,15 +199,14 @@ const SignUp = () => {
                       {[1, 2, 3, 4].map((level) => (
                         <div
                           key={level}
-                          className={`h-1 flex-1 rounded ${
-                            passwordStrength >= level
+                          className={`h-1 flex-1 rounded ${passwordStrength >= level
                               ? passwordStrength === 2
                                 ? 'bg-warning'
                                 : passwordStrength >= 3
-                                ? 'bg-success'
-                                : 'bg-destructive'
+                                  ? 'bg-success'
+                                  : 'bg-destructive'
                               : 'bg-muted'
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
@@ -296,7 +296,7 @@ const SignUp = () => {
               <Button type="submit" className="w-full" size="lg" disabled={loading}>
                 {loading ? 'Creating account...' : 'Create Account'}
               </Button>
-              
+
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
@@ -376,7 +376,7 @@ const SignUp = () => {
           </Card>
         </div>
       </div>
-      
+
       {/* Modals */}
       <TermsModal open={showTermsModal} onOpenChange={setShowTermsModal} />
       <PrivacyModal open={showPrivacyModal} onOpenChange={setShowPrivacyModal} />

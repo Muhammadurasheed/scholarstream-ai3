@@ -82,7 +82,7 @@ window.addEventListener('scholarstream-auth-sync', ((event: CustomEvent) => {
 
     console.log('🔑 [EXT] Auth sync event received from web app!');
 
-    chrome.storage.local.set({ 
+    chrome.storage.local.set({
         authToken: token,
         userProfile: user || {}
     }, () => {
@@ -379,13 +379,13 @@ class FocusEngine {
             </div>
         `;
         document.body.appendChild(overlay);
-        
+
         // Event listeners for refinement
         overlay.querySelector('#ss-refinement-close')?.addEventListener('click', () => this.hideRefinementOverlay());
         overlay.querySelector('#ss-refinement-expand')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more detailed and comprehensive. Add specific examples and elaborate on key points.'));
         overlay.querySelector('#ss-refinement-concise')?.addEventListener('click', () => this.applyQuickRefinement('Make this response more concise and to the point. Remove unnecessary words while keeping the core message.'));
         overlay.querySelector('#ss-refinement-submit')?.addEventListener('click', () => this.submitRefinement());
-        
+
         // Auto-grow textarea
         const textarea = overlay.querySelector('#ss-refinement-input') as HTMLTextAreaElement;
         textarea?.addEventListener('input', (e) => {
@@ -400,7 +400,7 @@ class FocusEngine {
             }
             if ((e as KeyboardEvent).key === 'Escape') this.hideRefinementOverlay();
         });
-        
+
         return overlay;
     }
 
@@ -409,7 +409,7 @@ class FocusEngine {
         document.addEventListener('focusin', (e) => this.handleFocus(e), true);
         document.addEventListener('scroll', () => this.updatePosition(), true);
         window.addEventListener('resize', () => this.updatePosition());
-        
+
         // NEW: Double-click listener for refinement on filled fields
         document.addEventListener('dblclick', (e) => this.handleDoubleClick(e), true);
     }
@@ -421,16 +421,16 @@ class FocusEngine {
 
         // Only trigger on input/textarea that has content
         if (!['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
-        
+
         const input = target as HTMLInputElement | HTMLTextAreaElement;
         if (input.type === 'file' || input.type === 'hidden' || input.type === 'submit') return;
-        
+
         // Only show refinement if field has content (likely AI-filled)
         if (!input.value || input.value.trim().length < 20) return;
-        
+
         // Prevent text selection on double-click
         e.preventDefault();
-        
+
         this.lastFilledElement = input;
         this.showRefinementOverlay(input);
     }
@@ -439,11 +439,11 @@ class FocusEngine {
         const rect = target.getBoundingClientRect();
         const top = rect.bottom + window.scrollY + 8;
         const left = rect.left + window.scrollX;
-        
+
         this.refinementOverlay.style.top = `${top}px`;
         this.refinementOverlay.style.left = `${left}px`;
         this.refinementOverlay.style.display = 'block';
-        
+
         // Focus the input
         setTimeout(() => {
             (this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLInputElement)?.focus();
@@ -462,29 +462,29 @@ class FocusEngine {
 
     private async submitRefinement() {
         if (!this.lastFilledElement) return;
-        
+
         const input = this.lastFilledElement as HTMLInputElement | HTMLTextAreaElement;
         const refinementInput = this.refinementOverlay.querySelector('#ss-refinement-input') as HTMLTextAreaElement;
         const instruction = refinementInput.value.trim();
-        
+
         if (!instruction) {
             refinementInput.style.borderColor = '#ef4444';
             setTimeout(() => refinementInput.style.borderColor = '#334155', 1000);
             return;
         }
-        
+
         const currentContent = input.value;
         const fieldContext = this.analyzeField(input);
-        
+
         // Show loading state on button
         const submitBtn = this.refinementOverlay.querySelector('#ss-refinement-submit') as HTMLButtonElement;
         const originalText = submitBtn.innerText;
         submitBtn.innerText = 'Refining...';
         submitBtn.disabled = true;
-        
+
         // FAANG UX: Hide overlay and show "Refining..." feedback on the INPUT FIELD ITSELF immediately
         this.hideRefinementOverlay();
-        
+
         // Show refinement progress indicator on the field
         this.showEnhancedReasoning(
             `🔄 Refining: "${instruction.slice(0, 40)}..."`,
@@ -492,12 +492,12 @@ class FocusEngine {
             fieldContext,
             false
         );
-        
+
         try {
             const stored = await chrome.storage.local.get(['authToken', 'userProfile', 'documentStore']);
             const authToken = stored.authToken;
             if (!authToken) throw new Error('Not authenticated');
-            
+
             // Get project context from document store
             let projectContext = '';
             if (stored.documentStore?.documents?.length > 0) {
@@ -505,7 +505,7 @@ class FocusEngine {
                     .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
                     .join('\n\n');
             }
-            
+
             const refinementPrompt = `TASK: Refine the following content based on user instruction.
 
 CURRENT CONTENT:
@@ -544,13 +544,13 @@ IMPORTANT:
             });
 
             if (!response.ok) throw new Error('Refinement failed');
-            
+
             const data = await response.json();
             const refinedContent = data.sparkle_result?.content || data.filled_value || currentContent;
-            
+
             // Apply refined content with typewriter effect
             await this.typewriterEffect(input, refinedContent);
-            
+
             // Show success feedback - replace the "Refining..." with success
             this.showEnhancedReasoning(
                 `✅ Refined based on: "${instruction.slice(0, 50)}..."`,
@@ -558,7 +558,7 @@ IMPORTANT:
                 fieldContext,
                 false
             );
-            
+
         } catch (error) {
             console.error('Refinement failed:', error);
             // Show error on the field
@@ -944,11 +944,11 @@ IMPORTANT:
         // CRITICAL FIX: Check for documents in NEW documentStore, not legacy projectContext
         const stored = await chrome.storage.local.get(['userProfile', 'documentStore']);
         const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
-        
+
         // Check new multi-document store
         const documentStore = stored.documentStore as { documents: any[] } | undefined;
         const hasDocument = !!(documentStore?.documents && documentStore.documents.length > 0);
-        
+
         console.log('[Sparkle] Context check:', {
             hasProfile,
             hasDocument,
@@ -1020,13 +1020,13 @@ IMPORTANT:
         if (!this.activeElement) return;
         const target = this.activeElement as HTMLInputElement;
         const fieldContext = this.analyzeField(target);
-        
+
         // FIXED: Check documentStore instead of legacy projectContext
         const stored = await chrome.storage.local.get(['userProfile', 'documentStore']);
         const hasProfile = stored.userProfile && Object.keys(stored.userProfile).length > 0;
         const documentStore = stored.documentStore as { documents: any[] } | undefined;
         const hasDocument = !!(documentStore?.documents && documentStore.documents.length > 0);
-        
+
         await this.generateWithEnhancedContext(fieldContext, hasProfile, hasDocument);
     }
 
@@ -1081,34 +1081,34 @@ async function generateFieldContentEnhanced(
         // CRITICAL FIX: Read last mentioned docs from chat session, NOT all documents
         // This ensures sparkle uses ONLY the docs that were @mentioned in the last chat message
         const stored = await chrome.storage.local.get([
-            'userProfile', 
-            'documentStore', 
+            'userProfile',
+            'documentStore',
             'kbSettings',
             'lastMentionedDocs',  // NEW: Docs mentioned in last chat
             'lastKbSettings'       // NEW: KB settings from last chat
         ]);
-        
+
         userProfile = stored.userProfile || {};
         const documentStore = stored.documentStore as { documents: any[] } | undefined;
         const lastMentionedDocs = stored.lastMentionedDocs as { id: string; filename: string }[] | undefined;
         const lastKbSettings = stored.lastKbSettings as { includeProfile: boolean; hasMentionedDocs: boolean } | undefined;
-        
+
         // STRICT KB SYNC: If docs were mentioned in chat, use ONLY those docs
         if (lastMentionedDocs && lastMentionedDocs.length > 0 && documentStore?.documents) {
             // Filter to only the mentioned documents
             const mentionedFilenames = new Set(lastMentionedDocs.map(d => d.filename.toLowerCase()));
-            const mentionedDocs = documentStore.documents.filter((d: any) => 
+            const mentionedDocs = documentStore.documents.filter((d: any) =>
                 mentionedFilenames.has(d.filename.toLowerCase())
             );
-            
+
             if (mentionedDocs.length > 0) {
                 projectContext = mentionedDocs
                     .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
                     .join('\n\n');
-                console.log(`[Sparkle] Using ONLY ${mentionedDocs.length} mentioned doc(s):`, 
+                console.log(`[Sparkle] Using ONLY ${mentionedDocs.length} mentioned doc(s):`,
                     mentionedDocs.map((d: any) => d.filename));
             }
-            
+
             // Use the KB settings from the last chat (profile inclusion)
             if (lastKbSettings && !lastKbSettings.includeProfile) {
                 console.log('[Sparkle] Profile excluded by last chat KB settings');
@@ -1118,13 +1118,13 @@ async function generateFieldContentEnhanced(
             // NO docs were mentioned in chat - fallback: use all docs (backwards compatible)
             // But check kbSettings toggle
             const kbSettings = stored.kbSettings as { useProfileAsKnowledge?: boolean } | undefined;
-            
+
             projectContext = documentStore.documents
                 .map((d: any) => `--- ${d.filename} ---\n${d.content}`)
                 .join('\n\n');
-            console.log(`[Sparkle] No chat mentions - using all ${documentStore.documents.length} doc(s):`, 
+            console.log(`[Sparkle] No chat mentions - using all ${documentStore.documents.length} doc(s):`,
                 documentStore.documents.map((d: any) => d.filename));
-            
+
             // Apply KB toggle for profile
             if (kbSettings && kbSettings.useProfileAsKnowledge === false) {
                 console.log('[Sparkle] Profile excluded by KB toggle');
@@ -1296,13 +1296,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function handleAutoFill(projectContext?: string) {
     // ENHANCED: Better field detection - find ALL visible inputs including those in cards/sections
     const allInputs: HTMLElement[] = [];
-    
+
     // Primary selector: All standard form elements
     document.querySelectorAll('input, select, textarea').forEach(el => allInputs.push(el as HTMLElement));
-    
+
     // Also find contenteditable elements (rich text editors)
     document.querySelectorAll('[contenteditable="true"]').forEach(el => allInputs.push(el as HTMLElement));
-    
+
     // Deduplicate by checking if element is already included
     const seenElements = new Set<HTMLElement>();
     const uniqueInputs = allInputs.filter(el => {
@@ -1310,23 +1310,23 @@ async function handleAutoFill(projectContext?: string) {
         seenElements.add(el);
         return true;
     });
-    
+
     const formFields = uniqueInputs.map((el: any) => {
         // Enhanced label detection - look in multiple places
         let label = '';
-        
+
         // 1. Check for label[for="id"]
         if (el.id) {
             const labelEl = document.querySelector(`label[for="${el.id}"]`);
             if (labelEl) label = labelEl.textContent?.trim() || '';
         }
-        
+
         // 2. Check if wrapped in label
         if (!label) {
             const closestLabel = el.closest('label');
             if (closestLabel) label = closestLabel.textContent?.trim() || '';
         }
-        
+
         // 3. Check for previous sibling (often a label or heading)
         if (!label && el.previousElementSibling) {
             const prev = el.previousElementSibling;
@@ -1334,7 +1334,7 @@ async function handleAutoFill(projectContext?: string) {
                 label = prev.textContent?.trim() || '';
             }
         }
-        
+
         // 4. Check parent for section heading or card title
         if (!label) {
             const parent = el.closest('section, .card, .form-group, [class*="field"], [class*="input"]');
@@ -1345,15 +1345,15 @@ async function handleAutoFill(projectContext?: string) {
                 }
             }
         }
-        
+
         // 5. Fallback: Check aria-label or data attributes
         if (!label) {
-            label = el.getAttribute('aria-label') || 
-                    el.getAttribute('data-label') || 
-                    el.getAttribute('title') || 
-                    el.name?.replace(/[-_]/g, ' ') || '';
+            label = el.getAttribute('aria-label') ||
+                el.getAttribute('data-label') ||
+                el.getAttribute('title') ||
+                el.name?.replace(/[-_]/g, ' ') || '';
         }
-        
+
         return {
             id: el.id || '',
             name: el.name || '',
@@ -1365,17 +1365,17 @@ async function handleAutoFill(projectContext?: string) {
             ariaLabel: el.getAttribute('aria-label') || '',
             dataTestId: el.getAttribute('data-testid') || el.getAttribute('data-test') || '',
         };
-    }).filter(f => 
-        f.type !== 'hidden' && 
-        f.type !== 'submit' && 
-        f.type !== 'file' && 
+    }).filter(f =>
+        f.type !== 'hidden' &&
+        f.type !== 'submit' &&
+        f.type !== 'file' &&
         f.type !== 'button' &&
         f.type !== 'image' &&
         f.type !== 'reset'
     );
 
     if (formFields.length === 0) return { success: false, message: "No fields found" };
-    
+
     console.log(`[Auto-Fill] Detected ${formFields.length} fields:`, formFields.map(f => f.label || f.name || f.id));
 
     let userProfile: any = {};
@@ -1418,8 +1418,8 @@ async function handleAutoFill(projectContext?: string) {
         for (const [selector, value] of Object.entries(fieldMappings)) {
             // CRITICAL FIX: Validate selector before using querySelector
             // The AI sometimes returns URLs or invalid strings as "selectors"
-            if (!selector || 
-                selector.startsWith('http') || 
+            if (!selector ||
+                selector.startsWith('http') ||
                 selector.startsWith('www.') ||
                 selector.includes('://') ||
                 (!selector.startsWith('#') && !selector.startsWith('.') && !selector.startsWith('[') && !selector.match(/^[a-zA-Z]/))) {
@@ -1436,7 +1436,7 @@ async function handleAutoFill(projectContext?: string) {
                     el.dispatchEvent(new Event('input', { bubbles: true }));
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                     filledCount++;
-                    
+
                     // FIXED: Use outline instead of background to avoid readability issues on dark themes
                     el.style.outline = "2px solid #22c55e";
                     el.style.outlineOffset = "1px";
@@ -1474,9 +1474,8 @@ if (document.body.innerText.toLowerCase().includes('scholarship') ||
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 50px;
-      height: 50px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       box-shadow: 0 4px 15px rgba(0,0,0,0.3);
       z-index: 9999;
@@ -1484,12 +1483,17 @@ if (document.body.innerText.toLowerCase().includes('scholarship') ||
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      font-family: sans-serif;
-      font-weight: bold;
       transition: transform 0.2s;
+      background: transparent;
     `;
-    icon.innerText = "SS";
+
+    const img = document.createElement('img');
+    img.src = chrome.runtime.getURL("assets/ss_logo.png");
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "cover";
+    img.style.borderRadius = "50%";
+    icon.appendChild(img);
 
     icon.onclick = () => {
         console.log("Pulse Clicked - Requesting Side Panel Open");

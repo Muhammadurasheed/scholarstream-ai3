@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Eye, EyeOff, Sparkles, CheckCircle2 } from 'lucide-react';
+import ssLogo from '@/asset/ss_logo.png';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -110,9 +111,9 @@ const Login = () => {
 
         <div className="mx-auto w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold gradient-primary bg-clip-text text-transparent mb-2">
-              ScholarStream
-            </h1>
+            <div className="flex justify-center mb-4">
+              <img src={ssLogo} alt="ScholarStream Logo" className="w-16 h-16 object-contain" />
+            </div>
             <h2 className="text-2xl font-semibold mb-2">Welcome Back</h2>
             <p className="text-muted-foreground">Log in to continue your scholarship journey</p>
           </div>

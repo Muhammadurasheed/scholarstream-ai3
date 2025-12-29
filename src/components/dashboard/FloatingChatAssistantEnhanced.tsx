@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Sparkles, Loader2, Bookmark, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import ssLogo from '@/asset/ss_logo.png';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
@@ -133,11 +134,10 @@ export const FloatingChatAssistantEnhanced = () => {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-2xl hover:scale-110 transition-transform bg-gradient-to-r from-primary to-primary/80 z-50"
+        className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-2xl hover:scale-110 transition-transform bg-transparent p-0 z-50 overflow-hidden"
         size="icon"
       >
-        <MessageCircle className="h-6 w-6" />
-        <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-yellow-400 animate-pulse" />
+        <img src={ssLogo} alt="AI Assistant" className="h-full w-full object-cover" />
       </Button>
     );
   }
@@ -147,8 +147,8 @@ export const FloatingChatAssistantEnhanced = () => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/10 to-primary/5">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          <div className="h-10 w-10 text-primary-foreground flex items-center justify-center">
+            <img src={ssLogo} alt="AI Logo" className="h-10 w-10 object-contain" />
           </div>
           <div>
             <h3 className="font-semibold">ScholarStream AI</h3>
@@ -174,8 +174,8 @@ export const FloatingChatAssistantEnhanced = () => {
             >
               <div
                 className={`max-w-[85%] rounded-2xl p-3 ${message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted'
                   }`}
               >
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>

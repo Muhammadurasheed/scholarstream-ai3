@@ -10,6 +10,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import ssLogo from '@/asset/ss_logo.png';
 
 export const DashboardHeader = () => {
   const { user, signOut } = useAuth();
@@ -63,9 +64,7 @@ export const DashboardHeader = () => {
             onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 transition-opacity hover:opacity-80"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">S</span>
-            </div>
+            <img src={ssLogo} alt="ScholarStream" className="h-8 w-8 object-contain rounded-lg" />
             <span className="hidden text-lg font-bold sm:inline-block">ScholarStream</span>
           </button>
 

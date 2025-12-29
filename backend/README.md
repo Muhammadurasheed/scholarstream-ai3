@@ -318,6 +318,4 @@ grep ERROR logs/app.log
 ```
 
 ## 📝 License
-
-Student Hackpad 2025 Project - ScholarStream
 Built with excellence.

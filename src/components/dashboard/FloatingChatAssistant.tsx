@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import ssLogo from '@/asset/ss_logo.png';
 
 interface Action {
   type: 'navigate' | 'save' | 'apply' | 'filter' | 'external_link';
@@ -32,9 +33,9 @@ interface Message {
 // V2: Collapsible Thinking Process Component
 const ThinkingProcessSection = ({ content }: { content: string }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   if (!content) return null;
-  
+
   return (
     <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 overflow-hidden">
       <button
@@ -47,7 +48,7 @@ const ThinkingProcessSection = ({ content }: { content: string }) => {
         </div>
         {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
-      
+
       {isExpanded && (
         <div className="px-3 pb-3 text-xs text-muted-foreground">
           <ReactMarkdown
@@ -257,11 +258,10 @@ export const FloatingChatAssistant = () => {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg hover:scale-110 transition-transform bg-gradient-to-r from-primary to-primary/80 z-50"
+        className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg hover:scale-110 transition-transform bg-transparent p-0 z-50 overflow-hidden"
         size="icon"
       >
-        <MessageCircle className="h-6 w-6" />
-        <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-yellow-400" />
+        <img src={ssLogo} alt="AI Assistant" className="h-full w-full object-cover" />
       </Button>
     );
   }
@@ -276,8 +276,8 @@ export const FloatingChatAssistant = () => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/10 to-primary/5">
         <div className="flex items-center gap-2">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          <div className="h-10 w-10 text-primary-foreground flex items-center justify-center">
+            <img src={ssLogo} alt="AI Logo" className="h-10 w-10 object-contain" />
           </div>
           <div>
             <h3 className="font-semibold text-foreground">ScholarStream AI</h3>
@@ -363,8 +363,8 @@ export const FloatingChatAssistant = () => {
                           {/* Match Score Badge - Left side */}
                           <div className="flex-shrink-0 flex flex-col items-center gap-1">
                             <div className="h-1.5 w-10 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-primary rounded-full transition-all" 
+                              <div
+                                className="h-full bg-primary rounded-full transition-all"
                                 style={{ width: `${opp.match_score || 50}%` }}
                               />
                             </div>
@@ -372,19 +372,19 @@ export const FloatingChatAssistant = () => {
                               {opp.match_score || 50}% Match
                             </Badge>
                           </div>
-                          
+
                           {/* Content */}
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-sm line-clamp-1">{opp.name}</h4>
                             <p className="text-xs text-muted-foreground">{opp.organization}</p>
                             <p className="text-sm font-semibold text-emerald-500 mt-1">
-                              {opp.amount_display && opp.amount_display !== '$0' && opp.amount_display !== 'See details' 
-                                ? stripHtml(opp.amount_display) 
+                              {opp.amount_display && opp.amount_display !== '$0' && opp.amount_display !== 'See details'
+                                ? stripHtml(opp.amount_display)
                                 : 'See Details'}
                             </p>
                           </div>
                         </div>
-                        
+
                         {/* Action Buttons */}
                         <div className="flex gap-2 mt-2">
                           <Button
@@ -410,7 +410,7 @@ export const FloatingChatAssistant = () => {
                         </div>
                       </Card>
                     ))}
-                    
+
                     {/* Show count if many */}
                     {message.opportunities.length > 6 && (
                       <p className="text-xs text-center text-muted-foreground pt-1">
