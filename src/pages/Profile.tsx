@@ -1324,7 +1324,7 @@ export default function Profile() {
               <CardContent className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Member Since</span>
-                  <span className="font-medium">Oct 2024</span>
+                  <span className="font-medium">Dec 2025</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">

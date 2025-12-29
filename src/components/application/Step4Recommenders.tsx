@@ -179,7 +179,7 @@ export default function Step4Recommenders({
                   id="rec_context"
                   value={newRecommender.subject_context || ''}
                   onChange={(e) => setNewRecommender({ ...newRecommender, subject_context: e.target.value })}
-                  placeholder="AP Computer Science, Fall 2024"
+                  placeholder="AP Computer Science, Fall 2025"
                 />
               </div>
             </div>
