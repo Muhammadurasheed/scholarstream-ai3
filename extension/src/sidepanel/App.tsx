@@ -464,6 +464,17 @@ export default function App() {
                 includeProfile
             });
 
+            // CRITICAL: Store the last mentioned docs so sparkle can use ONLY these
+            // This syncs the chat KB selection with sparkle button behavior
+            await chrome.storage.local.set({
+                lastMentionedDocs: mentionedDocs.map(d => ({ id: d.id, filename: d.filename })),
+                lastKbSettings: {
+                    includeProfile,
+                    hasMentionedDocs: mentionedDocs.length > 0
+                }
+            });
+            console.log(`[KB] Stored last mentioned docs for sparkle sync:`, mentionedDocs.map(d => d.filename));
+
             const response = await fetch(ENDPOINTS.chat, {
                 method: 'POST',
                 headers: {
