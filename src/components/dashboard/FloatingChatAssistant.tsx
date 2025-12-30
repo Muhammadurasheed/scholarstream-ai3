@@ -128,7 +128,7 @@ export const FloatingChatAssistant = () => {
     setIsLoading(true);
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://scholarstream-backend-opdnpd6bsq-uc.a.run.app';
 
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',

@@ -309,6 +309,58 @@ If NO SEARCH RESULTS are found:
             all_opps = await db.get_all_scholarships()
             stats['total_scanned'] = len(all_opps)
             
+            # 2. SEMANTIC VECTOR SEARCH - Triggered when:
+            #    - Database has few results
+            #    - User is searching for specific types (hackathon, bounty)
+            #    - Explicit semantic search request
+            semantic_results = []
+            use_semantic = (
+                len(all_opps) < 50 or 
+                any(kw in criteria['types'] for kw in ['hackathon', 'bounty', 'grant']) or
+                criteria.get('use_semantic', False)
+            )
+            
+            if use_semantic:
+                try:
+                    from app.services.vectorization_service import vectorization_service
+                    
+                    # Build query string from search context
+                    query_parts = criteria['types'].copy()
+                    query_parts.append(profile.get('major', ''))
+                    query_parts.extend(criteria.get('keywords', []))
+                    query_parts.extend(profile.get('interests', [])[:2])
+                    query_text = ' '.join([p for p in query_parts if p])
+                    
+                    logger.info("Triggering semantic search", query=query_text[:100])
+                    
+                    # Generate query embedding
+                    query_embedding = await vectorization_service.vectorize_query(query_text)
+                    
+                    if query_embedding:
+                        semantic_results = await db.semantic_search(
+                            query_embedding, 
+                            limit=30, 
+                            min_similarity=0.50
+                        )
+                        
+                        # Merge with keyword results (deduplicate by ID)
+                        existing_ids = {opp.id for opp in all_opps}
+                        added_count = 0
+                        for sem_opp in semantic_results:
+                            if sem_opp.id not in existing_ids:
+                                all_opps.append(sem_opp)
+                                existing_ids.add(sem_opp.id)
+                                added_count += 1
+                        
+                        stats['semantic_matches'] = len(semantic_results)
+                        stats['semantic_added'] = added_count
+                        logger.info("Semantic search enriched results", 
+                                   semantic_found=len(semantic_results), 
+                                   new_added=added_count)
+                                   
+                except Exception as sem_err:
+                    logger.warning("Semantic search failed, continuing with keyword results", error=str(sem_err))
+            
             # TRIGGER ON-DEMAND SCRAPING if database is thin
             if depth == 0 and (len(all_opps) < 20 or any(kw in criteria['types'] for kw in ['hackathon', 'bounty'])):
                 logger.info("Triggering background on-demand search mission")

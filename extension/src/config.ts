@@ -4,7 +4,8 @@
  */
 
 // API Configuration
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
+export const API_URL = 'https://scholarstream-backend-opdnpd6bsq-uc.a.run.app';
+// export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
 
 // Derived API endpoints
 export const ENDPOINTS = {
@@ -49,30 +50,30 @@ export function detectPlatform(url: string): string {
  */
 export function calculateProfileCompleteness(profile: any): number {
   if (!profile) return 0;
-  
+
   const weights = {
     // Core identity (40%)
     full_name: 10,
     email: 10,
     bio: 20,
-    
+
     // Academic (20%)
     school_name: 5,
     major: 5,
     graduation_year: 5,
     gpa: 5,
-    
+
     // Skills (20%)
     hard_skills: 10,
     soft_skills: 10,
-    
+
     // Portfolio (20%)
     projects: 10,
     experience: 10,
   };
-  
+
   let score = 0;
-  
+
   // Check each field
   if (profile.full_name || (profile.first_name && profile.last_name)) score += weights.full_name;
   if (profile.email) score += weights.email;
@@ -85,7 +86,7 @@ export function calculateProfileCompleteness(profile: any): number {
   if (profile.soft_skills?.length > 0) score += weights.soft_skills;
   if (profile.projects?.length > 0) score += weights.projects;
   if (profile.experience?.length > 0) score += weights.experience;
-  
+
   return Math.min(100, score);
 }
 
@@ -123,18 +124,18 @@ export interface ContextStatus {
  * Supports PDF, DOCX, TXT, MD, JSON
  */
 export async function parseDocument(
-  file: File, 
+  file: File,
   authToken: string
-): Promise<{ 
-  success: boolean; 
-  content: string; 
-  charCount: number; 
-  fileType: string; 
-  error?: string 
+): Promise<{
+  success: boolean;
+  content: string;
+  charCount: number;
+  fileType: string;
+  error?: string
 }> {
   const formData = new FormData();
   formData.append('file', file);
-  
+
   try {
     const response = await fetch(ENDPOINTS.parseDocument, {
       method: 'POST',
@@ -143,12 +144,12 @@ export async function parseDocument(
       },
       body: formData,
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.detail || `Server error: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return {
       success: true,

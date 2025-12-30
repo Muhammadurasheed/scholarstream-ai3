@@ -91,5 +91,34 @@ class VectorizationService:
             logger.error("Opportunity vectorization failed", error=str(e))
             return None
 
+    async def vectorize_query(self, query: str) -> Optional[List[float]]:
+        """
+        Generate embedding for a search query.
+        Uses retrieval_query task type for optimal search performance.
+        
+        This is used by the AI chat to enable semantic search over opportunities.
+        """
+        if not settings.gemini_api_key:
+            logger.warning("Query vectorization skipped: No Gemini API Key")
+            return None
+        
+        if not query or len(query.strip()) < 3:
+            return None
+        
+        try:
+            result = genai.embed_content(
+                model=self.MODEL_NAME,
+                content=query.strip(),
+                task_type="retrieval_query"  # Optimized for search queries
+            )
+            
+            embedding = result['embedding']
+            logger.info("Generated query embedding", query_preview=query[:50], dimensions=len(embedding))
+            return embedding
+            
+        except Exception as e:
+            logger.error("Query vectorization failed", error=str(e), query=query[:50])
+            return None
+
 # Singleton
 vectorization_service = VectorizationService()

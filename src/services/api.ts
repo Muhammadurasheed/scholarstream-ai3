@@ -1,7 +1,7 @@
 // API Service Layer for ScholarStream Backend Integration
 import { Scholarship, DiscoveryJobResponse, UserProfile } from '@/types/scholarship';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://scholarstream-backend-opdnpd6bsq-uc.a.run.app';
 
 class ApiService {
   private async fetchWithAuth(endpoint: string, options: RequestInit = {}) {

@@ -3,9 +3,12 @@
 // Handles Push Notifications via WebSocket with REAL Firebase Auth
 
 // API Configuration
+const API_URL = 'https://scholarstream-backend-opdnpd6bsq-uc.a.run.app';
+/*
 const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__'
     ? '__VITE_API_URL__'
     : 'http://localhost:8081';
+*/
 const WS_URL = API_URL.replace('http', 'ws') + '/ws/opportunities';
 
 let websocket: WebSocket | null = null;

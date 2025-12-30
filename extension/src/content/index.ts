@@ -3,9 +3,13 @@ console.log("ScholarStream Content Script Loaded");
 import { getPageContext } from '../utils/domScanner';
 
 // API Configuration - matches extension config
+// API Configuration - Hardcoded for production
+const API_URL = 'https://scholarstream-backend-opdnpd6bsq-uc.a.run.app';
+/*
 const API_URL = '__VITE_API_URL__' !== '__VITE_API_URL__'
     ? '__VITE_API_URL__'
     : 'http://localhost:8081';
+*/
 
 const ENDPOINTS = {
     mapFields: `${API_URL}/api/extension/map-fields`,

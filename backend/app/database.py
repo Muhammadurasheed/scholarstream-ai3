@@ -543,6 +543,93 @@ class FirebaseDB:
             logger.error("Failed to clear chat history", user_id=user_id, error=str(e))
             raise
 
+    # ============ SEMANTIC VECTOR SEARCH ============
+    
+    def _cosine_similarity(self, vec_a: List[float], vec_b: List[float]) -> float:
+        """
+        Compute cosine similarity between two vectors.
+        Returns value between -1 and 1 (higher = more similar).
+        """
+        if not vec_a or not vec_b:
+            return 0.0
+        
+        if len(vec_a) != len(vec_b):
+            logger.warning("Vector dimension mismatch", dim_a=len(vec_a), dim_b=len(vec_b))
+            return 0.0
+        
+        import math
+        
+        dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+        magnitude_a = math.sqrt(sum(a * a for a in vec_a))
+        magnitude_b = math.sqrt(sum(b * b for b in vec_b))
+        
+        if magnitude_a == 0 or magnitude_b == 0:
+            return 0.0
+        
+        return dot_product / (magnitude_a * magnitude_b)
+    
+    async def semantic_search(
+        self, 
+        query_embedding: List[float], 
+        limit: int = 20,
+        min_similarity: float = 0.55
+    ) -> List[Scholarship]:
+        """
+        Search scholarships by vector similarity.
+        
+        Uses in-memory cosine similarity over all opportunities with embeddings.
+        This is the MVP approach - for production scale, consider:
+        - Firestore Vector Search (when GA)
+        - Pinecone / Weaviate for dedicated vector DB
+        
+        Args:
+            query_embedding: 768-dim embedding of the search query
+            limit: Maximum results to return
+            min_similarity: Minimum cosine similarity threshold (0.0 to 1.0)
+            
+        Returns:
+            List of Scholarship objects sorted by similarity score (highest first)
+        """
+        try:
+            all_scholarships = await self.get_all_scholarships()
+            scored = []
+            
+            embedding_count = 0
+            
+            for scholarship in all_scholarships:
+                # Skip opportunities without embeddings
+                if not scholarship.embedding:
+                    continue
+                
+                embedding_count += 1
+                
+                # Calculate cosine similarity
+                similarity = self._cosine_similarity(query_embedding, scholarship.embedding)
+                
+                if similarity >= min_similarity:
+                    # Attach similarity score for later use
+                    scholarship.match_score = round(similarity * 100, 1)
+                    scored.append((similarity, scholarship))
+            
+            # Sort by similarity descending
+            scored.sort(key=lambda x: x[0], reverse=True)
+            
+            results = [s[1] for s in scored[:limit]]
+            
+            logger.info(
+                "Semantic search completed",
+                total_scanned=len(all_scholarships),
+                with_embeddings=embedding_count,
+                matches_found=len(results),
+                min_similarity=min_similarity
+            )
+            
+            return results
+            
+        except Exception as e:
+            logger.error("Semantic search failed", error=str(e))
+            return []
+
 
 # Global database instance
 db = FirebaseDB()

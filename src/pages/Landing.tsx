@@ -242,7 +242,7 @@ const Landing = () => {
       <footer className="py-12 border-t border-white/5 relative z-10">
         <div className="max-w-6xl mx-auto px-6 text-center">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} ScholarStream. Powered by advanced AI.
+            © {new Date().getFullYear()} ScholarStream. Powered by Confluent Cloud.
           </p>
         </div>
       </footer>
